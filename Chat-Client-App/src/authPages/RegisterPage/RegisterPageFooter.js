@@ -31,8 +31,8 @@ const RegisterPageFooter = ({ handleRegister, isFormValid }) => {
       </div>
       </Tooltip>
       <RedirectInfo
-        text={'Need an account?'}
-        redirectText={'Create an account'}
+        text={'Already have account?'}
+        redirectText={'Go to Login Page'}
         additionalStyles={{marginTop: '5px'}}
         redirectHandler={redirectToRegisterPage}
       />
