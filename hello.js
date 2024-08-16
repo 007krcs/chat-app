@@ -14,7 +14,6 @@ const PDFEditor: React.FC = () => {
         const pdfDoc = await PDFDocument.load(typedArray);
         setPdfBytes(typedArray);
         displayPdf(typedArray); // Display the original PDF
-        prefillFormFields(pdfDoc); // Prefill form fields if needed
       };
 
       fileReader.readAsArrayBuffer(file);
@@ -24,23 +23,29 @@ const PDFEditor: React.FC = () => {
     }
   };
 
-  const prefillFormFields = (pdfDoc: PDFDocument) => {
-    const form = pdfDoc.getForm();
+  const modifyPdf = async () => {
+    if (pdfBytes) {
+      try {
+        const pdfDoc = await PDFDocument.load(pdfBytes);
+        const form = pdfDoc.getForm();
 
-    // Example: Prefill a text field
-    const textField = form.getTextField('Name');
-    textField.setText('John Doe');
+        // Example: Set text field value
+        const textField = form.getTextField('Name');
+        textField.setText('John Doe');
 
-    // Example: Prefill a checkbox field
-    const checkboxField = form.getCheckBox('Agree');
-    checkboxField.check();
+        // Example: Set checkbox value
+        const checkboxField = form.getCheckBox('Agree');
+        checkboxField.check();
 
-    // Update the displayed PDF with prefilled fields
-    const modifiedBytes = pdfDoc.save();
-    modifiedBytes.then((bytes) => {
-      setPdfBytes(new Uint8Array(bytes));
-      displayPdf(new Uint8Array(bytes));
-    });
+        // Save the modifications
+        const modifiedBytes = await pdfDoc.save();
+        setPdfBytes(modifiedBytes);
+        displayPdf(modifiedBytes); // Display the modified PDF
+      } catch (error) {
+        console.error('Error modifying PDF: ', error);
+        alert('Failed to modify the PDF.');
+      }
+    }
   };
 
   const displayPdf = (pdfData: Uint8Array) => {
@@ -71,6 +76,9 @@ const PDFEditor: React.FC = () => {
           if (e.target.files) loadPdf(e.target.files[0]);
         }}
       />
+      <button onClick={modifyPdf} disabled={!pdfBytes}>
+        Modify PDF
+      </button>
       <button onClick={savePdf} disabled={!pdfBytes}>
         Save PDF
       </button>
