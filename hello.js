@@ -1,106 +1,59 @@
-import React, { useState } from 'react';
-import { PDFDocument, PDFTextField, PDFCheckBox } from 'pdf-lib';
+import { useEffect, useRef, useState } from 'react';
+import WebViewer, {WebViewerInstance} from '@pdftron/webviewer';
 
-const PDFEditor: React.FC = () => {
-  const [pdfDoc, setPdfDoc] = useState<PDFDocument | null>(null);
-  const [formFields, setFormFields] = useState<{ [key: string]: string }>({});
+const PDFEditor = () => {
+    const viewerDiv = useRef(null);
+    const [instance, setInstance] = useState<WebViewerInstance | null>(null);
 
-  const loadPdf = async (file: File) => {
-    try {
-      const fileReader = new FileReader();
+    useEffect(() => {
+        let viewerInstance: any;
 
-      fileReader.onload = async () => {
-        const typedArray = new Uint8Array(fileReader.result as ArrayBuffer);
-        const doc = await PDFDocument.load(typedArray);
-        setPdfDoc(doc);
-
-        const form = doc.getForm();
-        const fields = form.getFields();
-
-        const initialValues: { [key: string]: string } = {};
-        fields.forEach(field => {
-          const fieldName = field.getName();
-          if (field instanceof PDFTextField) {
-            initialValues[fieldName] = field.getText();
-          } else if (field instanceof PDFCheckBox) {
-            initialValues[fieldName] = field.isChecked() ? 'checked' : '';
-          }
-        });
-
-        setFormFields(initialValues);
-      };
-
-      fileReader.readAsArrayBuffer(file);
-    } catch (error) {
-      console.error('Error loading PDF file:', error);
-      alert('Failed to load the PDF file.');
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormFields({
-      ...formFields,
-      [name]: value,
-    });
-  };
-
-  const savePdf = async () => {
-    if (pdfDoc) {
-      const form = pdfDoc.getForm();
-      Object.keys(formFields).forEach(key => {
-        const field = form.getField(key);
-        if (field instanceof PDFTextField) {
-          field.setText(formFields[key]);
-        } else if (field instanceof PDFCheckBox) {
-          if (formFields[key] === 'checked') {
-            field.check();
-          } else {
-            field.uncheck();
-          }
+        if (!instance && viewerDiv.current) {
+            WebViewer(
+                {
+                    path: '/lib', // Path to WebViewer's assets
+                    initialDoc: '/blob.pdf', // Path to your PDF
+                },
+                viewerDiv.current,
+            ).then((inst) => {
+                viewerInstance = inst;
+                setInstance(viewerInstance);
+            });
         }
-      });
 
-      const modifiedBytes = await pdfDoc.save();
-      const blob = new Blob([modifiedBytes], { type: 'application/pdf' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'modified.pdf';
-      link.click();
-    }
-  };
+        return () => {
+            if (viewerInstance) {
+                viewerInstance.dispose(); // Dispose of the instance when the component unmounts or re-renders
+                setInstance(null); // Clear the instance state
+            }
+        };
+    }, [instance]);
 
-  return (
-    <div>
-      <input
-        type="file"
-        accept="application/pdf"
-        onChange={(e) => {
-          if (e.target.files) loadPdf(e.target.files[0]);
-        }}
-      />
+    const savePdf = async () => {
+        if (instance) {
+            const { documentViewer, annotationManager } = instance.Core;
+            const doc = documentViewer.getDocument() // TypeScript now understands the type
+            const xfdfString = await annotationManager.exportAnnotations();
+            const data = await doc.getFileData({ xfdfString });
+            const blob = new Blob([new Uint8Array(data)], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'edited-document.pdf';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    };
 
-      {Object.keys(formFields).length > 0 && (
-        <form>
-          {Object.keys(formFields).map((fieldName) => (
-            <div key={fieldName}>
-              <label>{fieldName}</label>
-              <input
-                type="text"
-                name={fieldName}
-                value={formFields[fieldName]}
-                onChange={handleChange}
-              />
-            </div>
-          ))}
-        </form>
-      )}
-
-      <button onClick={savePdf} disabled={!pdfDoc}>
-        Save PDF
-      </button>
-    </div>
-  );
+    return (
+        <>
+            <div
+                ref={viewerDiv}
+                style={{ height: '30rem', width: '100%', border: '1px solid black', marginLeft: '28rem' }}
+            ></div>
+            <button onClick={savePdf} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginLeft: '28rem' }}>Save PDF</button>
+        </>
+    );
 };
 
 export default PDFEditor;
