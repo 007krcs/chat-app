@@ -57,3 +57,6 @@ const PDFEditor = () => {
 };
 
 export default PDFEditor;
+
+"@pdftron/pdfjs-express": "^8.7.5",
+    "@pdftron/webviewer": "^10.11.1",
