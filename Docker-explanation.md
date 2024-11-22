@@ -215,4 +215,172 @@ Containers <--> Networks [icon: network]
 Containers <--> Volumes [icon: database]
 ```
 
-Let me know if you'd like code snippets for any specific functionality or further details!
+To test if a Docker image is built correctly locally, you can follow these steps:
+
+
+---
+
+1. List Locally Built Images
+
+Check if the Docker image exists locally using:
+
+docker images
+
+Output:
+
+Look for your image in the list.
+
+Verify the REPOSITORY, TAG, and IMAGE ID match your expectations.
+
+
+
+
+---
+
+2. Run a Container from the Image
+
+Run a container using the locally built image:
+
+docker run -d --name test_container -p 8080:8080 <image_name>
+
+Flags:
+
+-d: Run the container in detached mode.
+
+--name: Assign a name to the container.
+
+-p: Map ports between the host and the container.
+
+
+Expected Behavior:
+
+The container should start without errors.
+
+Check logs to ensure it is running as expected:
+
+docker logs test_container
+
+
+
+
+---
+
+3. Test Application Inside the Container
+
+Access the Application:
+
+Open a browser or use curl to test if the application is running:
+
+curl http://localhost:8080
+
+Replace 8080 with the port your application is configured to use.
+
+
+Verify Application Logs:
+
+Check the application logs to confirm that it is functioning correctly:
+
+docker exec -it test_container cat /path/to/log/file
+
+
+
+
+---
+
+4. Verify Container State
+
+Check the state of the running container:
+
+docker ps
+
+Ensure the container is listed and in the "Up" state.
+
+If the container is not listed, check stopped containers:
+
+docker ps -a
+
+
+
+---
+
+5. Inspect the Image
+
+Inspect the image for metadata and configuration:
+
+docker inspect <image_name>
+
+Check for:
+
+Correct ENTRYPOINT or CMD.
+
+Exposed ports and environment variables.
+
+
+
+
+---
+
+6. Test Shell Access Inside the Container
+
+Get a shell inside the running container to test functionality:
+
+docker exec -it test_container /bin/bash
+
+Verify the expected files, directories, and configurations.
+
+
+
+---
+
+7. Clean Up After Testing
+
+Stop and remove the container:
+
+docker stop test_container
+docker rm test_container
+
+
+---
+
+8. Debugging Issues
+
+If the image does not work as expected:
+
+1. Rebuild the image:
+
+docker build -t <image_name> .
+
+
+2. Add debugging information in the Dockerfile, such as:
+
+RUN ls /path/to/check
+CMD echo "Debugging: Start of container"
+
+
+3. Re-test after fixing issues.
+
+
+
+
+---
+
+9. Automate Tests
+
+For automated testing, use tools like:
+
+Docker Compose: To test multi-container setups.
+
+Test Scripts: Write shell or Python scripts to validate functionality.
+
+
+Example:
+
+#!/bin/bash
+docker run --rm -d -p 8080:8080 --name test_container <image_name>
+sleep 5
+curl -I http://localhost:8080 | grep "200 OK" && echo "Image is correct" || echo "Image has issues"
+docker stop test_container
+docker rm test_container
+
+This ensures that your Docker image is functioning as expected. Let me know if you need help debugging!
+
