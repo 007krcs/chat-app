@@ -1,99 +1,17 @@
-import React, { FC, useEffect, useState } from 'react';
+const urlRegex = /^https?:\/\/[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+(\.[a-zA-Z]{2,})(\/[^\s]*)?$/;
 
-interface SelectProps {
-  options: string[];
-  onChange: (option: string) => void;
-  className?: string;
-  id?: string;
-  isDisabled?: boolean; // Add support for disabling the component
-}
+// Example usage:
+const validateUrl = (url) => urlRegex.test(url);
 
-const Select: FC<SelectProps> = ({ options, onChange, className, id, isDisabled = false }) => {
-  const [compWidth, setCompWidth] = useState<any>('100%');
-  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
-
-  useEffect(() => {
-    function setDynamicWidth() {
-      const element = document.getElementById(id || '');
-      if (!element) return;
-      const windowWidth = window.innerWidth;
-      let width;
-      if (windowWidth <= 400) width = '12rem';
-      else if (windowWidth <= 600) width = '12rem';
-      else if (windowWidth <= 800) width = '24rem';
-      else if (windowWidth <= 1024) width = '24rem';
-      else width = '27rem';
-      setCompWidth(width);
-    }
-
-    setDynamicWidth();
-    window.addEventListener('resize', setDynamicWidth);
-    window.addEventListener('orientationchange', setDynamicWidth);
-
-    return () => {
-      window.removeEventListener('resize', setDynamicWidth);
-      window.removeEventListener('orientationchange', setDynamicWidth);
-    };
-  }, [id]);
-
-  // Keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLSelectElement>) => {
-    if (isDisabled) return;
-    switch (e.key) {
-      case 'ArrowDown':
-        setFocusedIndex((prev) => (prev + 1) % options.length);
-        break;
-      case 'ArrowUp':
-        setFocusedIndex((prev) => (prev - 1 + options.length) % options.length);
-        break;
-      case 'Enter':
-      case ' ':
-        if (focusedIndex > -1) onChange(options[focusedIndex]);
-        break;
-      default:
-        break;
-    }
-  };
-
-  return (
-    <div className={className} style={{ position: 'relative' }}>
-      <label htmlFor={id} style={{ visibility: 'hidden' }}>
-        Select Option
-      </label>
-      <select
-        id={id}
-        style={{
-          width: compWidth,
-          maxWidth: '100%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          cursor: isDisabled ? 'not-allowed' : 'pointer',
-        }}
-        aria-disabled={isDisabled} // Add ARIA for screen readers
-        disabled={isDisabled} // Disable dropdown if needed
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-      >
-        {options.map((option, index) => (
-          <option
-            key={option}
-            value={option}
-            aria-selected={focusedIndex === index}
-            disabled={isDisabled}
-          >
-            {option}
-          </option>
-        ))}
-      </select>
-      {/* Optional instruction for screen readers */}
-      {isDisabled && (
-        <span style={{ fontSize: '0.75rem', color: 'gray' }}>
-          This selection is currently disabled.
-        </span>
-      )}
-    </div>
-  );
-};
-
-export default Select;
+// Test cases
+console.log(validateUrl("www.google"));          // false
+console.log(validateUrl("abc.e"));               // false
+console.log(validateUrl("test.n"));              // false
+console.log(validateUrl("https://www.google.com")); // true
+console.log(validateUrl("http://example.co.in")); // true
+console.log(validateUrl("https://sub.example.com")); // true
+console.log(validateUrl("http://localhost"));     // false
+console.log(validateUrl("http://www.google"));    // false
+console.log(validateUrl("https://google.com"));   // true
+console.log(validateUrl("google"));               // false
+console.log(validateUrl("http://google"));
