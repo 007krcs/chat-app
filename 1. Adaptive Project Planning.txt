@@ -1,1 +1,76 @@
-const urlRegex = /^(https?:\/\/)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(\/[^\s]*)?$/;
+const MultiSelectDropdown = ({
+  options,
+  onChange,
+  multiSelect = true, // Default to multi-select
+}: {
+  options: string[];
+  onChange: (selected: string[]) => void;
+  multiSelect?: boolean;
+}) => {
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [filteredOptions, setFilteredOptions] = useState<string[]>(options);
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        if (filteredOptions.length > 0) {
+          setFocusedIndex((prev) => (prev + 1) % filteredOptions.length);
+        }
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        if (filteredOptions.length > 0) {
+          setFocusedIndex((prev) => (prev - 1 + filteredOptions.length) % filteredOptions.length);
+        }
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (focusedIndex > -1) {
+          const selectedOption = filteredOptions[focusedIndex];
+          if (multiSelect) {
+            // Multi-select logic
+            const updatedOptions = selectedOptions.includes(selectedOption)
+              ? selectedOptions.filter((option) => option !== selectedOption) // Remove if already selected
+              : [...selectedOptions, selectedOption]; // Add if not selected
+            setSelectedOptions(updatedOptions); // Update local state
+            onChange(updatedOptions); // Notify parent
+          } else {
+            // Single-select logic
+            setSelectedOptions([selectedOption]); // Replace with the selected option
+            onChange([selectedOption]); // Notify parent
+          }
+        }
+        break;
+      default:
+        break;
+    }
+  };
+
+  return (
+    <div tabIndex={0} onKeyDown={handleKeyDown}>
+      {filteredOptions.map((option, index) => (
+        <div
+          key={option}
+          className={focusedIndex === index ? "option focused" : "option"}
+          onClick={() => {
+            // Handle mouse click selection
+            if (multiSelect) {
+              const updatedOptions = selectedOptions.includes(option)
+                ? selectedOptions.filter((opt) => opt !== option)
+                : [...selectedOptions, option];
+              setSelectedOptions(updatedOptions);
+              onChange(updatedOptions);
+            } else {
+              setSelectedOptions([option]);
+              onChange([option]);
+            }
+          }}
+        >
+          {option} {selectedOptions.includes(option) && <span>✔</span>}
+        </div>
+      ))}
+    </div>
+  );
+};
