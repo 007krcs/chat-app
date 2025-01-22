@@ -1,76 +1,156 @@
-const MultiSelectDropdown = ({
-  options,
-  onChange,
-  multiSelect = true, // Default to multi-select
-}: {
-  options: string[];
-  onChange: (selected: string[]) => void;
-  multiSelect?: boolean;
-}) => {
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [filteredOptions, setFilteredOptions] = useState<string[]>(options);
-  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+Based on the Jest configuration in your `package.json`, Babel configuration in `babel.config.json`, and the errors shown, the issue appears to be caused by incompatible Babel plugins or configurations. Here's how to fix it step-by-step:
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        if (filteredOptions.length > 0) {
-          setFocusedIndex((prev) => (prev + 1) % filteredOptions.length);
-        }
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        if (filteredOptions.length > 0) {
-          setFocusedIndex((prev) => (prev - 1 + filteredOptions.length) % filteredOptions.length);
-        }
-        break;
-      case "Enter":
-        e.preventDefault();
-        if (focusedIndex > -1) {
-          const selectedOption = filteredOptions[focusedIndex];
-          if (multiSelect) {
-            // Multi-select logic
-            const updatedOptions = selectedOptions.includes(selectedOption)
-              ? selectedOptions.filter((option) => option !== selectedOption) // Remove if already selected
-              : [...selectedOptions, selectedOption]; // Add if not selected
-            setSelectedOptions(updatedOptions); // Update local state
-            onChange(updatedOptions); // Notify parent
-          } else {
-            // Single-select logic
-            setSelectedOptions([selectedOption]); // Replace with the selected option
-            onChange([selectedOption]); // Notify parent
-          }
-        }
-        break;
-      default:
-        break;
+---
+
+### **Problem Analysis**
+
+1. **Babel Plugin Issue**
+   - The error `The "original" argument must be of type function` typically occurs when Jest is processing files and encounters a Babel plugin misconfiguration.
+   - The `babel-plugin-istanbul` used in your `babel.config.json` seems to be causing the issue.
+
+2. **Jest Transform Issue**
+   - The Jest configuration in your `package.json` uses `babel-jest` for transforming files. Ensure it's correctly installed and compatible.
+
+3. **TypeScript Presets**
+   - Your Babel configuration includes `@babel/preset-typescript`. Verify if it matches the versions of Jest and TypeScript.
+
+---
+
+### **Fixes**
+
+#### **1. Update Babel Configuration**
+
+Modify your `babel.config.json` to include a condition for using `babel-plugin-istanbul` only during test coverage runs:
+
+```json
+{
+  "presets": [
+    ["@babel/preset-env", { "targets": { "node": "current" } }],
+    "@babel/preset-typescript"
+  ],
+  "env": {
+    "test": {
+      "plugins": ["babel-plugin-istanbul"]
     }
-  };
+  }
+}
+```
 
-  return (
-    <div tabIndex={0} onKeyDown={handleKeyDown}>
-      {filteredOptions.map((option, index) => (
-        <div
-          key={option}
-          className={focusedIndex === index ? "option focused" : "option"}
-          onClick={() => {
-            // Handle mouse click selection
-            if (multiSelect) {
-              const updatedOptions = selectedOptions.includes(option)
-                ? selectedOptions.filter((opt) => opt !== option)
-                : [...selectedOptions, option];
-              setSelectedOptions(updatedOptions);
-              onChange(updatedOptions);
-            } else {
-              setSelectedOptions([option]);
-              onChange([option]);
-            }
-          }}
-        >
-          {option} {selectedOptions.includes(option) && <span>✔</span>}
-        </div>
-      ))}
-    </div>
-  );
-};
+This ensures `babel-plugin-istanbul` is only used in the `test` environment to avoid issues during other builds.
+
+---
+
+#### **2. Install Required Dependencies**
+
+Ensure all dependencies are installed and updated to compatible versions:
+
+```bash
+npm install --save-dev jest babel-jest @babel/core @babel/preset-env @babel/preset-typescript babel-plugin-istanbul
+```
+
+---
+
+#### **3. Verify Jest Transform Configuration**
+
+Ensure your Jest configuration in `package.json` matches this structure:
+
+```json
+"jest": {
+  "roots": [
+    "<rootDir>/src"
+  ],
+  "collectCoverageFrom": [
+    "src/**/*.{js,jsx,ts,tsx}",
+    "!src/**/*.d.ts"
+  ],
+  "setupFiles": [
+    "react-app-polyfill/jsdom"
+  ],
+  "setupFilesAfterEnv": [
+    "<rootDir>/src/setupTests.ts"
+  ],
+  "testMatch": [
+    "<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}",
+    "<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}"
+  ],
+  "testEnvironment": "jsdom",
+  "transform": {
+    "^.+\\.(js|jsx|ts|tsx)$": "babel-jest",
+    "^.+\\.css$": "<rootDir>/config/jest/cssTransform.js",
+    "^(?!.*\\.(js|jsx|ts|tsx|css|json)$)": "<rootDir>/config/jest/fileTransform.js"
+  },
+  "transformIgnorePatterns": [
+    "[/\\\\]node_modules[/\\\\].+\\.(js|jsx|ts|tsx)$",
+    "^.+\\.module\\.(css|sass|scss)$"
+  ],
+  "modulePaths": [],
+  "moduleNameMapper": {
+    "^react-native$": "react-native-web",
+    "^.+\\.module\\.(css|sass|scss)$": "identity-obj-proxy",
+    "^@/(.*)$": "<rootDir>/src/$1"
+  },
+  "moduleFileExtensions": [
+    "web.js",
+    "js",
+    "web.ts",
+    "ts",
+    "web.tsx",
+    "tsx",
+    "json",
+    "web.jsx",
+    "jsx",
+    "node"
+  ],
+  "resetMocks": true
+}
+```
+
+---
+
+#### **4. Clear Jest Cache**
+
+Run the following to clear Jest's cache:
+
+```bash
+jest --clearCache
+```
+
+---
+
+#### **5. Check the Test File**
+
+In your test file (`utils.test.ts`), make sure all imports and syntax are compatible. For example:
+
+```typescript
+import { expect, describe, test } from '@jest/globals';
+import { sum } from '../utils';
+
+describe('sum module', () => {
+  test('adds 1 + 2 to equal 3', () => {
+    expect(sum(1, 2)).toBe(3);
+  });
+});
+```
+
+---
+
+#### **6. Run Jest in Debug Mode**
+
+To debug further, run Jest in verbose mode:
+
+```bash
+jest --verbose --runInBand
+```
+
+---
+
+### **Final Steps**
+
+1. Apply the above fixes.
+2. Rerun your tests using:
+
+   ```bash
+   npm test
+   ```
+
+3. If the issue persists, share any updated error messages or configurations for further troubleshooting.
