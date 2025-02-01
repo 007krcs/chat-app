@@ -1,156 +1,341 @@
-Based on the Jest configuration in your `package.json`, Babel configuration in `babel.config.json`, and the errors shown, the issue appears to be caused by incompatible Babel plugins or configurations. Here's how to fix it step-by-step:
+import AdvancedTable from "./AdvancedTable";  // Adjust path based on file structure
+interface Column {
+  field: string;
+  header: string;
+  sortable?: boolean;
+  filterable?: boolean;
+  width?: string;
+  expandable?: boolean;
+  type?: "text" | "number" | "date";
+}
+const ParentComponent = () => {
+  const columns: Column[] = [
+    { field: "id", header: "ID", sortable: true, type: "text" },
+    { field: "name", header: "Business Name", sortable: true, type: "text" },
+    { field: "status", header: "Status", sortable: true, type: "text" },
+    { field: "date", header: "Date", sortable: true, type: "date" },
+    { field: "expand", header: "", expandable: true },  // ✅ Added for expandable rows
+];;
 
----
+const data = Array.from({ length: 50 }, (_, i) => ({
+  id: `LEAD_${i + 1}`,
+  name: `Business ${i + 1} Inc.`,
+  status: i % 2 === 0 ? "Pass" : "Fail",
+  date: new Date().toISOString().split("T")[0],  // ISO Date format
+  details: { // ✅ Ensure each row has a details field
+      description: `Additional information about ${i + 1}`,
+      owner: `Owner ${i + 1}`,
+  },
+}));
 
-### **Problem Analysis**
+  return (
+      <AdvancedTable columns={columns} data={data} pageSize={10} />
+  );
+};
 
-1. **Babel Plugin Issue**
-   - The error `The "original" argument must be of type function` typically occurs when Jest is processing files and encounters a Babel plugin misconfiguration.
-   - The `babel-plugin-istanbul` used in your `babel.config.json` seems to be causing the issue.
+export default ParentComponent;
 
-2. **Jest Transform Issue**
-   - The Jest configuration in your `package.json` uses `babel-jest` for transforming files. Ensure it's correctly installed and compatible.
 
-3. **TypeScript Presets**
-   - Your Babel configuration includes `@babel/preset-typescript`. Verify if it matches the versions of Jest and TypeScript.
 
----
 
-### **Fixes**
 
-#### **1. Update Babel Configuration**
 
-Modify your `babel.config.json` to include a condition for using `babel-plugin-istanbul` only during test coverage runs:
 
-```json
-{
-  "presets": [
-    ["@babel/preset-env", { "targets": { "node": "current" } }],
-    "@babel/preset-typescript"
-  ],
-  "env": {
-    "test": {
-      "plugins": ["babel-plugin-istanbul"]
+
+
+import React, { useState, useMemo, useEffect } from "react";
+import { FaSort, FaSortUp, FaSortDown, FaPlus, FaMinus } from "react-icons/fa";
+import { format, parseISO } from "date-fns";
+
+interface Column {
+  field: string;
+  header: string;
+  sortable?: boolean;
+  filterable?: boolean;
+  width?: string;
+  expandable?: boolean;
+  type?: "text" | "number" | "date";
+}
+
+interface Row {
+  [key: string]: any;
+}
+
+interface Props {
+  columns: Column[];
+  data: Row[];
+  pageSize?: number;
+}
+
+const FONT_OPTIONS = [
+  "Arial, sans-serif",
+  "'Courier New', monospace",
+  "'Georgia', serif",
+  "'Tahoma', sans-serif",
+  "'Verdana', sans-serif",
+];
+const getFontColor = (bgColor: string): string => {
+  // Convert HEX to RGB
+  const hex = bgColor.replace("#", "");
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+
+  // Calculate luminance (formula used in W3C accessibility guidelines)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+  return luminance > 0.5 ? "#000000" : "#ffffff"; // Dark text on light bg, Light text on dark bg
+};
+
+const AdvancedTable: React.FC<Props> = ({ columns, data, pageSize = 10 }) => {
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc" | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [searchDate, setSearchDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [expandedRows, setExpandedRows] = useState<{ [key: string]: boolean }>({});
+  const [backgroundColor, setBackgroundColor] = useState(() => localStorage.getItem("tableBgColor") || "#ffffff");
+  const [fontFamily, setFontFamily] = useState(() => localStorage.getItem("tableFont") || FONT_OPTIONS[0]);
+  const [fontColor, setFontColor] = useState(getFontColor(backgroundColor));
+
+  // Store user settings in localStorage when changed
+  useEffect(() => {
+    localStorage.setItem("tableBgColor", backgroundColor);
+    setFontColor(getFontColor(backgroundColor)); // Update font color dynamically
+  }, [backgroundColor]);
+
+  useEffect(() => {
+    localStorage.setItem("tableFont", fontFamily);
+  }, [fontFamily]);
+
+  // Handle Sorting
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
     }
-  }
-}
-```
+  };
 
-This ensures `babel-plugin-istanbul` is only used in the `test` environment to avoid issues during other builds.
+  // Toggle Expand/Collapse
+  const toggleExpand = (id: string) => {
+    setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+  
 
----
 
-#### **2. Install Required Dependencies**
+  const filteredData = useMemo(() => {
+    return data.filter((row) => {
+      let matchesSearch = false;
+      let matchesDate = false;
 
-Ensure all dependencies are installed and updated to compatible versions:
+      // 🔹 Search Text Filtering (Fix: Ensures it applies correctly)
+      if (searchText.trim() !== "") {
+        matchesSearch = Object.values(row).some((value) =>
+          value.toString().toLowerCase().includes(searchText.toLowerCase())
+        );
+      } else {
+        matchesSearch = true; // No search input means include all
+      }
 
-```bash
-npm install --save-dev jest babel-jest @babel/core @babel/preset-env @babel/preset-typescript babel-plugin-istanbul
-```
+      // 🔹 Date Filtering (Fix: Ensures exact match)
+      if (searchDate) {
+        const rowDate = new Date(row.date).toISOString().split("T")[0]; // Normalize date
+        const formattedSearchDate = new Date(searchDate).toISOString().split("T")[0];
+        matchesDate = rowDate === formattedSearchDate;
+      } else {
+        matchesDate = true; // No date input means include all
+      }
 
----
+      // 🔹 Return only rows that match both filters
+      return matchesSearch && matchesDate;
+    });
+  }, [searchText, searchDate, data]);
 
-#### **3. Verify Jest Transform Configuration**
 
-Ensure your Jest configuration in `package.json` matches this structure:
 
-```json
-"jest": {
-  "roots": [
-    "<rootDir>/src"
-  ],
-  "collectCoverageFrom": [
-    "src/**/*.{js,jsx,ts,tsx}",
-    "!src/**/*.d.ts"
-  ],
-  "setupFiles": [
-    "react-app-polyfill/jsdom"
-  ],
-  "setupFilesAfterEnv": [
-    "<rootDir>/src/setupTests.ts"
-  ],
-  "testMatch": [
-    "<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}",
-    "<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}"
-  ],
-  "testEnvironment": "jsdom",
-  "transform": {
-    "^.+\\.(js|jsx|ts|tsx)$": "babel-jest",
-    "^.+\\.css$": "<rootDir>/config/jest/cssTransform.js",
-    "^(?!.*\\.(js|jsx|ts|tsx|css|json)$)": "<rootDir>/config/jest/fileTransform.js"
-  },
-  "transformIgnorePatterns": [
-    "[/\\\\]node_modules[/\\\\].+\\.(js|jsx|ts|tsx)$",
-    "^.+\\.module\\.(css|sass|scss)$"
-  ],
-  "modulePaths": [],
-  "moduleNameMapper": {
-    "^react-native$": "react-native-web",
-    "^.+\\.module\\.(css|sass|scss)$": "identity-obj-proxy",
-    "^@/(.*)$": "<rootDir>/src/$1"
-  },
-  "moduleFileExtensions": [
-    "web.js",
-    "js",
-    "web.ts",
-    "ts",
-    "web.tsx",
-    "tsx",
-    "json",
-    "web.jsx",
-    "jsx",
-    "node"
-  ],
-  "resetMocks": true
-}
-```
 
----
+  // Sorting
+  const sortedData = useMemo(() => {
+    if (!sortField || !sortOrder) return filteredData;
+    return [...filteredData].sort((a, b) => {
+      const column = columns.find((col) => col.field === sortField);
+      if (!column) return 0;
 
-#### **4. Clear Jest Cache**
+      let aValue = a[sortField];
+      let bValue = b[sortField];
 
-Run the following to clear Jest's cache:
+      if (column.type === "date") {
+        aValue = parseISO(aValue).getTime();
+        bValue = parseISO(bValue).getTime();
+      }
 
-```bash
-jest --clearCache
-```
+      if (aValue < bValue) return sortOrder === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [sortField, sortOrder, filteredData, columns]);
 
----
+  // Pagination
+  const totalPages = Math.ceil(sortedData.length / pageSize);
+  const paginatedData = sortedData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-#### **5. Check the Test File**
+  return (
+    <div style={{ padding: "20px", maxWidth: "100%", background: backgroundColor, fontFamily }}>
+     
+    {/* Search Inputs & Format Dropdown */}
+    <div style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "center" }}>
+      <input
+        type="text"
+        placeholder="🔍 Search..."
+        value={searchText}
+        onChange={(e) => setSearchText(e.target.value)}
+        style={{
+          padding: "10px",
+          width: "220px",
+          borderRadius: "8px",
+          border: "1px solid #ccc",
+        }}
+      />
+      <input
+        type="date"
+        value={searchDate}
+        onChange={(e) => setSearchDate(e.target.value)}
+        style={{
+          padding: "10px",
+          borderRadius: "8px",
+          border: "1px solid #ccc",
+        }}
+      />
+       <div style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "center" }}>
+        <input type="color" value={backgroundColor} onChange={(e) => setBackgroundColor(e.target.value)} />
+        <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)}>
+          {FONT_OPTIONS.map((font, index) => (
+            <option key={index} value={font}>
+              {font}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
 
-In your test file (`utils.test.ts`), make sure all imports and syntax are compatible. For example:
+    {/* Table */}
+    <table style={{ width: "100%", borderCollapse: "collapse", borderRadius: "10px", overflow: "hidden", background: backgroundColor, fontFamily, color: fontColor }}>
+      <thead>
+        <tr style={{ background: backgroundColor, fontFamily, color: fontColor }}>
+          {columns.map((col) => (
+            <th
+              key={col.field}
+              style={{
+                padding: "12px",
+                borderBottom: "2px solid #ddd",
+                cursor: col.sortable ? "pointer" : "default",
+                textAlign: "left",
+              }}
+              onClick={() => col.sortable && handleSort(col.field)}
+            >
+              {col.header}
+              {col.sortable && (
+                <>
+                  {" "}
+                  {sortField === col.field ? (
+                    sortOrder === "asc" ? (
+                      <FaSortUp />
+                    ) : (
+                      <FaSortDown />
+                    )
+                  ) : (
+                    <FaSort />
+                  )}
+                </>
+              )}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody style={{background: backgroundColor}}>
+        {paginatedData.map((row) => (
+          <React.Fragment key={row.id}>
+            <tr
+              style={{
+                borderBottom: "1px solid #ddd",
+                background: expandedRows[row.id] ? backgroundColor : backgroundColor,
+                fontFamily, color: fontColor
+              }}
+            >
+              {columns.map((col) => (
+                <td key={col.field} style={{ padding: "12px", textAlign: "left", backgroundColor }}>
+                  {col.expandable ? (
+                    <button
+                      onClick={() => toggleExpand(row.id)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#007bff",
+                        fontSize: "16px",
+                      }}
+                    >
+                      {expandedRows[row.id] ? <FaMinus /> : <FaPlus />}
+                    </button>
+                  ) : col.type === "date" ? (
+                    format(parseISO(row[col.field]), "MMM dd, yyyy")
+                  ) : (
+                    String(row[col.field])
+                  )}
+                </td>
+              ))}
+            </tr>
 
-```typescript
-import { expect, describe, test } from '@jest/globals';
-import { sum } from '../utils';
+            {/* Expanded View */}
+            {expandedRows[row.id] && row.details && (
+              <tr>
+                <td colSpan={columns.length} style={{ padding: "12px", background: "#f8f9fa", backgroundColor }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Field</th>
+                        <th>Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(row.details).map(([key, value]: any) => (
+                        <tr key={key}>
+                          <td><strong>{key}</strong></td>
+                          <td>{String(value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            )}
+          </React.Fragment>
+        ))}
+      </tbody>
+    </table>
 
-describe('sum module', () => {
-  test('adds 1 + 2 to equal 3', () => {
-    expect(sum(1, 2)).toBe(3);
-  });
-});
-```
+    {/* Pagination Controls */}
+    <div style={{ marginTop: "15px", display: "flex", justifyContent: "space-between", alignItems: "center", background: backgroundColor, fontFamily, color: fontColor }}>
+      <button
+        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+        disabled={currentPage === 1}
+        style={{ padding: "8px 16px", borderRadius: "6px", background: "#007bff", color: "white", border: "none", cursor: "pointer" }}
+      >
+        Prev
+      </button>
+      <span> Page {currentPage} of {totalPages} </span>
+      <button
+        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+        disabled={currentPage === totalPages}
+        style={{ padding: "8px 16px", borderRadius: "6px", background: "#007bff", color: "white", border: "none", cursor: "pointer" }}
+      >
+        Next
+      </button>
+    </div>
+  </div>
+);
+};
 
----
-
-#### **6. Run Jest in Debug Mode**
-
-To debug further, run Jest in verbose mode:
-
-```bash
-jest --verbose --runInBand
-```
-
----
-
-### **Final Steps**
-
-1. Apply the above fixes.
-2. Rerun your tests using:
-
-   ```bash
-   npm test
-   ```
-
-3. If the issue persists, share any updated error messages or configurations for further troubleshooting.
+export default AdvancedTable;
