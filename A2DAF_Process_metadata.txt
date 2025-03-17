@@ -1,35 +1,17 @@
-
-pop up which is not coming
-.icgds .lmn-modal-wrap.lmn-modal-centered {
-    align-items: normal;
-    display: flex;
-    min-height: calc(100% - 4rem);
-	top: 50rem
-}
-
-Commercial bank and Learn More button
-#multi-business>.lmn-row>.lmn-steps-multi-step{
-    #multi-business>.lmn-row>.lmn-steps-multi-step {
-        /* margin-left: .75rem !important; */
-    }
-}
-
-#multi-business>.lmn-body-2-single {
-    /* margin-left: 1rem!important; */
-    margin-right: 1rem!important;
-}
-
-Learn more button
-
-.icgds .lmn-pl-24px, .icgds .lmn-pl-6, .icgds .lmn-px-24px, .icgds .lmn-px-6 {
-    padding-left: 1.5rem!important;
-}
-
-
-
-For Phone drop down
-.icgds .lmn-dropdown {
-    display: inline-block;
-    position: relative;
-    max-width: 318px;
-}
+ const trapFocus = (event) => {
+      if (event.key === "Tab") {
+        if (event.shiftKey) {
+          // Shift + Tab (Backward navigation)
+          if (document.activeElement === firstButtonRef.current) {
+            event.preventDefault();
+            lastButtonRef.current.focus();
+          }
+        } else {
+          // Tab (Forward navigation)
+          if (document.activeElement === lastButtonRef.current) {
+            event.preventDefault();
+            firstButtonRef.current.focus();
+          }
+        }
+      }
+    };
