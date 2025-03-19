@@ -1,341 +1,123 @@
-import AdvancedTable from "./AdvancedTable";  // Adjust path based on file structure
-interface Column {
-  field: string;
-  header: string;
-  sortable?: boolean;
-  filterable?: boolean;
+import React, { useState, useRef, forwardRef, useEffect } from "react";
+import { Select, SelectProps, Option } from "@citi-icg-172888/icgds-react";
+import { FixedSizeList as List } from "react-window";
+import _ from "lodash";
+
+interface ISelectHocProps extends SelectProps {
+  options: string[];
+  onChange?: (options: string[]) => void;
   width?: string;
-  expandable?: boolean;
-  type?: "text" | "number" | "date";
-}
-const ParentComponent = () => {
-  const columns: Column[] = [
-    { field: "id", header: "ID", sortable: true, type: "text" },
-    { field: "name", header: "Business Name", sortable: true, type: "text" },
-    { field: "status", header: "Status", sortable: true, type: "text" },
-    { field: "date", header: "Date", sortable: true, type: "date" },
-    { field: "expand", header: "", expandable: true },  // ✅ Added for expandable rows
-];;
-
-const data = Array.from({ length: 50 }, (_, i) => ({
-  id: `LEAD_${i + 1}`,
-  name: `Business ${i + 1} Inc.`,
-  status: i % 2 === 0 ? "Pass" : "Fail",
-  date: new Date().toISOString().split("T")[0],  // ISO Date format
-  details: { // ✅ Ensure each row has a details field
-      description: `Additional information about ${i + 1}`,
-      owner: `Owner ${i + 1}`,
-  },
-}));
-
-  return (
-      <AdvancedTable columns={columns} data={data} pageSize={10} />
-  );
-};
-
-export default ParentComponent;
-
-
-
-
-
-
-
-
-
-import React, { useState, useMemo, useEffect } from "react";
-import { FaSort, FaSortUp, FaSortDown, FaPlus, FaMinus } from "react-icons/fa";
-import { format, parseISO } from "date-fns";
-
-interface Column {
-  field: string;
-  header: string;
-  sortable?: boolean;
-  filterable?: boolean;
-  width?: string;
-  expandable?: boolean;
-  type?: "text" | "number" | "date";
+  isDisabled?: boolean;
+  error?: string;
+  label?: string;
 }
 
-interface Row {
-  [key: string]: any;
-}
-
-interface Props {
-  columns: Column[];
-  data: Row[];
-  pageSize?: number;
-}
-
-const FONT_OPTIONS = [
-  "Arial, sans-serif",
-  "'Courier New', monospace",
-  "'Georgia', serif",
-  "'Tahoma', sans-serif",
-  "'Verdana', sans-serif",
-];
-const getFontColor = (bgColor: string): string => {
-  // Convert HEX to RGB
-  const hex = bgColor.replace("#", "");
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
-
-  // Calculate luminance (formula used in W3C accessibility guidelines)
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-
-  return luminance > 0.5 ? "#000000" : "#ffffff"; // Dark text on light bg, Light text on dark bg
-};
-
-const AdvancedTable: React.FC<Props> = ({ columns, data, pageSize = 10 }) => {
-  const [sortField, setSortField] = useState<string | null>(null);
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc" | null>(null);
-  const [searchText, setSearchText] = useState("");
-  const [searchDate, setSearchDate] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [expandedRows, setExpandedRows] = useState<{ [key: string]: boolean }>({});
-  const [backgroundColor, setBackgroundColor] = useState(() => localStorage.getItem("tableBgColor") || "#ffffff");
-  const [fontFamily, setFontFamily] = useState(() => localStorage.getItem("tableFont") || FONT_OPTIONS[0]);
-  const [fontColor, setFontColor] = useState(getFontColor(backgroundColor));
-
-  // Store user settings in localStorage when changed
-  useEffect(() => {
-    localStorage.setItem("tableBgColor", backgroundColor);
-    setFontColor(getFontColor(backgroundColor)); // Update font color dynamically
-  }, [backgroundColor]);
+const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
+  const { onChange, options, className, id, error, label } = props;
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const listRef = useRef<any>(null);
+  const optionsRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
-    localStorage.setItem("tableFont", fontFamily);
-  }, [fontFamily]);
+    if (highlightedIndex >= 0 && optionsRefs.current[highlightedIndex]) {
+      optionsRefs.current[highlightedIndex]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlightedIndex]);
 
-  // Handle Sorting
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
+  const onChangeHandler = (selectedOptions: string[]) => {
+    onChange && onChange(selectedOptions);
+    setIsOpen(false);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setHighlightedIndex((prevIndex) => (prevIndex + 1) % options.length);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setHighlightedIndex((prevIndex) => (prevIndex - 1 + options.length) % options.length);
+        break;
+      case "Enter":
+        event.preventDefault();
+        if (highlightedIndex >= 0) {
+          onChangeHandler([options[highlightedIndex]]);
+        }
+        break;
+      case "Escape":
+        setIsOpen(false);
+        break;
+      default:
+        break;
     }
   };
 
-  // Toggle Expand/Collapse
-  const toggleExpand = (id: string) => {
-    setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-  
-
-
-  const filteredData = useMemo(() => {
-    return data.filter((row) => {
-      let matchesSearch = false;
-      let matchesDate = false;
-
-      // 🔹 Search Text Filtering (Fix: Ensures it applies correctly)
-      if (searchText.trim() !== "") {
-        matchesSearch = Object.values(row).some((value) =>
-          value.toString().toLowerCase().includes(searchText.toLowerCase())
-        );
-      } else {
-        matchesSearch = true; // No search input means include all
-      }
-
-      // 🔹 Date Filtering (Fix: Ensures exact match)
-      if (searchDate) {
-        const rowDate = new Date(row.date).toISOString().split("T")[0]; // Normalize date
-        const formattedSearchDate = new Date(searchDate).toISOString().split("T")[0];
-        matchesDate = rowDate === formattedSearchDate;
-      } else {
-        matchesDate = true; // No date input means include all
-      }
-
-      // 🔹 Return only rows that match both filters
-      return matchesSearch && matchesDate;
-    });
-  }, [searchText, searchDate, data]);
-
-
-
-
-  // Sorting
-  const sortedData = useMemo(() => {
-    if (!sortField || !sortOrder) return filteredData;
-    return [...filteredData].sort((a, b) => {
-      const column = columns.find((col) => col.field === sortField);
-      if (!column) return 0;
-
-      let aValue = a[sortField];
-      let bValue = b[sortField];
-
-      if (column.type === "date") {
-        aValue = parseISO(aValue).getTime();
-        bValue = parseISO(bValue).getTime();
-      }
-
-      if (aValue < bValue) return sortOrder === "asc" ? -1 : 1;
-      if (aValue > bValue) return sortOrder === "asc" ? 1 : -1;
-      return 0;
-    });
-  }, [sortField, sortOrder, filteredData, columns]);
-
-  // Pagination
-  const totalPages = Math.ceil(sortedData.length / pageSize);
-  const paginatedData = sortedData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => (
+    <Option
+      key={options[index]}
+      label={options[index]}
+      aria-label={options[index]}
+      value={options[index]}
+      ref={(el: HTMLDivElement | null) => (optionsRefs.current[index] = el)}
+      aria-selected={highlightedIndex === index}
+      style={style} // Style from virtualization
+    >
+      {options[index]}
+    </Option>
+  );
 
   return (
-    <div style={{ padding: "20px", maxWidth: "100%", background: backgroundColor, fontFamily }}>
-     
-    {/* Search Inputs & Format Dropdown */}
-    <div style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "center" }}>
-      <input
-        type="text"
-        placeholder="🔍 Search..."
-        value={searchText}
-        onChange={(e) => setSearchText(e.target.value)}
+    <div
+      className={className}
+      tabIndex={0}
+      ref={ref}
+      onFocus={() => setIsOpen(true)}
+      onBlur={() => setIsOpen(false)}
+      onKeyDown={handleKeyDown}
+      aria-expanded={isOpen}
+      role="combobox"
+      aria-haspopup="listbox"
+      aria-owns={`${id}-listbox`}
+      aria-controls={`${id}-listbox`}
+      aria-label={label}
+      aria-activedescendant={highlightedIndex >= 0 ? `${id}-option-${highlightedIndex}` : undefined}
+    >
+      <Select
+        {...props}
+        id={id}
         style={{
-          padding: "10px",
-          width: "220px",
-          borderRadius: "8px",
-          border: "1px solid #ccc",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
-      />
-      <input
-        type="date"
-        value={searchDate}
-        onChange={(e) => setSearchDate(e.target.value)}
-        style={{
-          padding: "10px",
-          borderRadius: "8px",
-          border: "1px solid #ccc",
-        }}
-      />
-       <div style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "center" }}>
-        <input type="color" value={backgroundColor} onChange={(e) => setBackgroundColor(e.target.value)} />
-        <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)}>
-          {FONT_OPTIONS.map((font, index) => (
-            <option key={index} value={font}>
-              {font}
-            </option>
-          ))}
-        </select>
-      </div>
-    </div>
-
-    {/* Table */}
-    <table style={{ width: "100%", borderCollapse: "collapse", borderRadius: "10px", overflow: "hidden", background: backgroundColor, fontFamily, color: fontColor }}>
-      <thead>
-        <tr style={{ background: backgroundColor, fontFamily, color: fontColor }}>
-          {columns.map((col) => (
-            <th
-              key={col.field}
-              style={{
-                padding: "12px",
-                borderBottom: "2px solid #ddd",
-                cursor: col.sortable ? "pointer" : "default",
-                textAlign: "left",
-              }}
-              onClick={() => col.sortable && handleSort(col.field)}
-            >
-              {col.header}
-              {col.sortable && (
-                <>
-                  {" "}
-                  {sortField === col.field ? (
-                    sortOrder === "asc" ? (
-                      <FaSortUp />
-                    ) : (
-                      <FaSortDown />
-                    )
-                  ) : (
-                    <FaSort />
-                  )}
-                </>
-              )}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody style={{background: backgroundColor}}>
-        {paginatedData.map((row) => (
-          <React.Fragment key={row.id}>
-            <tr
-              style={{
-                borderBottom: "1px solid #ddd",
-                background: expandedRows[row.id] ? backgroundColor : backgroundColor,
-                fontFamily, color: fontColor
-              }}
-            >
-              {columns.map((col) => (
-                <td key={col.field} style={{ padding: "12px", textAlign: "left", backgroundColor }}>
-                  {col.expandable ? (
-                    <button
-                      onClick={() => toggleExpand(row.id)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "#007bff",
-                        fontSize: "16px",
-                      }}
-                    >
-                      {expandedRows[row.id] ? <FaMinus /> : <FaPlus />}
-                    </button>
-                  ) : col.type === "date" ? (
-                    format(parseISO(row[col.field]), "MMM dd, yyyy")
-                  ) : (
-                    String(row[col.field])
-                  )}
-                </td>
-              ))}
-            </tr>
-
-            {/* Expanded View */}
-            {expandedRows[row.id] && row.details && (
-              <tr>
-                <td colSpan={columns.length} style={{ padding: "12px", background: "#f8f9fa", backgroundColor }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Field</th>
-                        <th>Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(row.details).map(([key, value]: any) => (
-                        <tr key={key}>
-                          <td><strong>{key}</strong></td>
-                          <td>{String(value)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </td>
-              </tr>
-            )}
-          </React.Fragment>
-        ))}
-      </tbody>
-    </table>
-
-    {/* Pagination Controls */}
-    <div style={{ marginTop: "15px", display: "flex", justifyContent: "space-between", alignItems: "center", background: backgroundColor, fontFamily, color: fontColor }}>
-      <button
-        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-        disabled={currentPage === 1}
-        style={{ padding: "8px 16px", borderRadius: "6px", background: "#007bff", color: "white", border: "none", cursor: "pointer" }}
+        aria-label={label}
+        invalid={!!error}
+        showSearch
+        onChange={(option: any) => onChangeHandler(option)}
+        getPopupContainer={() => document.querySelector("#root")}
       >
-        Prev
-      </button>
-      <span> Page {currentPage} of {totalPages} </span>
-      <button
-        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-        disabled={currentPage === totalPages}
-        style={{ padding: "8px 16px", borderRadius: "6px", background: "#007bff", color: "white", border: "none", cursor: "pointer" }}
-      >
-        Next
-      </button>
+        {isOpen && (
+          <List
+            height={200} // Set dropdown height
+            itemCount={options.length}
+            itemSize={40} // Adjust row height
+            width="100%"
+            ref={listRef}
+          >
+            {Row}
+          </List>
+        )}
+      </Select>
     </div>
-  </div>
-);
+  );
+});
+
+SelectHoc.defaultProps = {
+  highlightOption: true,
+  mode: "default",
+  tagColor: "selected",
 };
 
-export default AdvancedTable;
+export default SelectHoc;
