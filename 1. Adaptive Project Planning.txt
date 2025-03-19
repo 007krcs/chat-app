@@ -9,31 +9,20 @@ interface ISelectHocProps extends SelectProps {
   isDisabled?: boolean;
   error?: string;
   label?: string;
-  multiSelect?: boolean; // Multi-select support
+  multiSelect?: boolean;
 }
 
 const ITEM_HEIGHT = 40;
-const VISIBLE_ITEM_COUNT = 5; // Number of items visible at once
+const VISIBLE_ITEM_COUNT = 5; // Controls how many items are visible at once
 
 const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
   const { onChange, options, className, id, error, label, multiSelect } = props;
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-
-  // Filtered options based on search input
-  const filteredOptions = options.filter((option) =>
-    option.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // State for lazy-rendering visible items
-  const [visibleItems, setVisibleItems] = useState(
-    filteredOptions.slice(0, VISIBLE_ITEM_COUNT)
-  );
 
   useEffect(() => {
     if (listRef.current) {
@@ -43,18 +32,11 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
             .filter((entry) => entry.isIntersecting)
             .map((entry) => Number(entry.target.getAttribute("data-index")));
 
-          setVisibleItems(
-            filteredOptions.slice(
-              Math.min(...visibleIndexes, 0),
-              Math.max(...visibleIndexes, VISIBLE_ITEM_COUNT)
-            )
-          );
+          if (visibleIndexes.length > 0) {
+            setHighlightedIndex(visibleIndexes[0]); // Auto-focus first visible item
+          }
         },
-        {
-          root: listRef.current,
-          rootMargin: "0px",
-          threshold: 0.1,
-        }
+        { root: listRef.current, rootMargin: "0px", threshold: 0.1 }
       );
 
       const listItems = listRef.current.querySelectorAll(".option-item");
@@ -62,7 +44,7 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
 
       return () => observer.disconnect();
     }
-  }, [filteredOptions]);
+  }, [options]);
 
   const handleSelection = (option: string) => {
     let updatedSelection = multiSelect
@@ -83,7 +65,7 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
-        setHighlightedIndex((prev) => Math.min(prev + 1, filteredOptions.length - 1));
+        setHighlightedIndex((prev) => Math.min(prev + 1, options.length - 1));
         break;
       case "ArrowUp":
         event.preventDefault();
@@ -92,7 +74,7 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
       case "Enter":
         event.preventDefault();
         if (highlightedIndex >= 0) {
-          handleSelection(filteredOptions[highlightedIndex]);
+          handleSelection(options[highlightedIndex]);
         }
         break;
       case "Escape":
@@ -124,99 +106,66 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
         maxWidth: "400px",
       }}
     >
-      {/* Search Input */}
-      <input
-        type="text"
-        placeholder="Search..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
+      <Select
+        {...props}
+        id={id}
         style={{
-          width: "100%",
-          padding: "10px",
-          border: "1px solid #ccc",
-          borderRadius: "5px",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
-      />
-
-      {/* Selected Values Display */}
-      {multiSelect && selectedOptions.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "5px",
-            padding: "5px",
-            border: "1px solid #ddd",
-            borderRadius: "5px",
-            marginTop: "5px",
-            background: "#f8f8f8",
-          }}
-        >
-          {selectedOptions.map((option) => (
-            <span
-              key={option}
-              style={{
-                background: "#007bff",
-                color: "#fff",
-                padding: "5px",
-                borderRadius: "5px",
-                fontSize: "14px",
-                cursor: "pointer",
-              }}
-              onClick={() => handleSelection(option)}
-            >
-              {option} ✖
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Dropdown List */}
-      {isOpen && (
-        <div
-          ref={containerRef}
-          style={{
-            height: ITEM_HEIGHT * VISIBLE_ITEM_COUNT,
-            overflowY: "auto",
-            position: "absolute",
-            width: "100%",
-            background: "#fff",
-            boxShadow: "0px 4px 6px rgba(0,0,0,0.1)",
-            borderRadius: "5px",
-            marginTop: "5px",
-            zIndex: 10,
-          }}
-        >
-          <div ref={listRef}>
-            {visibleItems.map((option, index) => (
-              <Option
-                key={option}
-                className="option-item"
-                data-index={index}
-                label={option}
-                aria-label={option}
-                value={option}
-                id={`${id}-option-${index}`}
-                aria-selected={highlightedIndex === index}
-                style={{
-                  width: "100%",
-                  height: `${ITEM_HEIGHT}px`,
-                  display: "flex",
-                  alignItems: "center",
-                  padding: "10px",
-                  cursor: "pointer",
-                  backgroundColor: highlightedIndex === index ? "#007bff" : "#fff",
-                  color: highlightedIndex === index ? "#fff" : "#000",
-                }}
-                onMouseEnter={() => setHighlightedIndex(index)}
-                onClick={() => handleSelection(option)}
-              >
-                {option}
-              </Option>
-            ))}
+        aria-label={label}
+        invalid={!!error}
+        showSearch
+        onChange={(option: any) => handleSelection(option)}
+        getPopupContainer={() => document.querySelector("#root")}
+      >
+        {isOpen && (
+          <div
+            ref={containerRef}
+            style={{
+              height: ITEM_HEIGHT * VISIBLE_ITEM_COUNT,
+              overflowY: "auto",
+              position: "absolute",
+              width: "100%",
+              background: "#fff",
+              boxShadow: "0px 4px 6px rgba(0,0,0,0.1)",
+              borderRadius: "5px",
+              marginTop: "5px",
+              zIndex: 10,
+            }}
+          >
+            <div ref={listRef}>
+              {options.slice(0, VISIBLE_ITEM_COUNT).map((option, index) => (
+                <Option
+                  key={option}
+                  className="option-item"
+                  data-index={index}
+                  label={option}
+                  aria-label={option}
+                  value={option}
+                  id={`${id}-option-${index}`}
+                  aria-selected={highlightedIndex === index}
+                  style={{
+                    width: "100%",
+                    height: `${ITEM_HEIGHT}px`,
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "10px",
+                    cursor: "pointer",
+                    backgroundColor: highlightedIndex === index ? "#007bff" : "#fff",
+                    color: highlightedIndex === index ? "#fff" : "#000",
+                  }}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  onClick={() => handleSelection(option)}
+                >
+                  {option}
+                </Option>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Select>
     </div>
   );
 });
