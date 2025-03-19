@@ -1,11 +1,11 @@
-import React, { useState, useRef, forwardRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, forwardRef } from "react";
 import { Select, SelectProps, Option } from "@citi-icg-172888/icgds-react";
-import { FixedSizeList as List } from "react-window";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import _ from "lodash";
 
 interface ISelectHocProps extends SelectProps {
   options: string[];
-  onChange?: (options: string[]) => void;
+  onChange?: (selected: string[]) => void;
   width?: string;
   isDisabled?: boolean;
   error?: string;
@@ -16,12 +16,20 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
   const { onChange, options, className, id, error, label } = props;
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const listRef = useRef<any>(null);
-  const optionsRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Virtualizer (Efficient Scrolling for Large Lists)
+  const rowVirtualizer = useVirtualizer({
+    count: options.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => 40, // Set item height
+    overscan: 5, // Renders extra items for smooth scroll
+  });
 
   useEffect(() => {
-    if (highlightedIndex >= 0 && optionsRefs.current[highlightedIndex]) {
-      optionsRefs.current[highlightedIndex]?.scrollIntoView({ block: "nearest" });
+    if (highlightedIndex >= 0) {
+      rowVirtualizer.scrollToIndex(highlightedIndex);
     }
   }, [highlightedIndex]);
 
@@ -34,11 +42,11 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
-        setHighlightedIndex((prevIndex) => (prevIndex + 1) % options.length);
+        setHighlightedIndex((prev) => Math.min(prev + 1, options.length - 1));
         break;
       case "ArrowUp":
         event.preventDefault();
-        setHighlightedIndex((prevIndex) => (prevIndex - 1 + options.length) % options.length);
+        setHighlightedIndex((prev) => Math.max(prev - 1, 0));
         break;
       case "Enter":
         event.preventDefault();
@@ -53,20 +61,6 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
         break;
     }
   };
-
-  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => (
-    <Option
-      key={options[index]}
-      label={options[index]}
-      aria-label={options[index]}
-      value={options[index]}
-      ref={(el: HTMLDivElement | null) => (optionsRefs.current[index] = el)}
-      aria-selected={highlightedIndex === index}
-      style={style} // Style from virtualization
-    >
-      {options[index]}
-    </Option>
-  );
 
   return (
     <div
@@ -99,15 +93,39 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
         getPopupContainer={() => document.querySelector("#root")}
       >
         {isOpen && (
-          <List
-            height={200} // Set dropdown height
-            itemCount={options.length}
-            itemSize={40} // Adjust row height
-            width="100%"
-            ref={listRef}
+          <div
+            ref={containerRef}
+            style={{
+              height: 200,
+              overflowY: "auto",
+              position: "relative",
+              width: "100%",
+            }}
           >
-            {Row}
-          </List>
+            <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => (
+                <Option
+                  key={options[virtualRow.index]}
+                  label={options[virtualRow.index]}
+                  aria-label={options[virtualRow.index]}
+                  value={options[virtualRow.index]}
+                  id={`${id}-option-${virtualRow.index}`}
+                  aria-selected={highlightedIndex === virtualRow.index}
+                  style={{
+                    position: "absolute",
+                    top: `${virtualRow.start}px`,
+                    width: "100%",
+                    height: "40px",
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "10px",
+                  }}
+                >
+                  {options[virtualRow.index]}
+                </Option>
+              ))}
+            </div>
+          </div>
         )}
       </Select>
     </div>
@@ -121,3 +139,6 @@ SelectHoc.defaultProps = {
 };
 
 export default SelectHoc;
+
+
+npm install @tanstack/react-virtual
