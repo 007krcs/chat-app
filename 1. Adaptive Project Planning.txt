@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, forwardRef } from "react";
 import { Select, SelectProps, Option } from "@citi-icg-172888/icgds-react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import _ from "lodash";
 
 interface ISelectHocProps extends SelectProps {
@@ -10,39 +9,81 @@ interface ISelectHocProps extends SelectProps {
   isDisabled?: boolean;
   error?: string;
   label?: string;
+  multiSelect?: boolean; // Multi-select support
 }
 
+const ITEM_HEIGHT = 40;
+const VISIBLE_ITEM_COUNT = 5; // Number of items visible at once
+
 const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
-  const { onChange, options, className, id, error, label } = props;
+  const { onChange, options, className, id, error, label, multiSelect } = props;
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
-  // Virtualizer (Efficient Scrolling for Large Lists)
-  const rowVirtualizer = useVirtualizer({
-    count: options.length,
-    getScrollElement: () => containerRef.current,
-    estimateSize: () => 40, // Set item height
-    overscan: 5, // Renders extra items for smooth scroll
-  });
+  // Filtered options based on search input
+  const filteredOptions = options.filter((option) =>
+    option.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // State for lazy-rendering visible items
+  const [visibleItems, setVisibleItems] = useState(
+    filteredOptions.slice(0, VISIBLE_ITEM_COUNT)
+  );
 
   useEffect(() => {
-    if (highlightedIndex >= 0) {
-      rowVirtualizer.scrollToIndex(highlightedIndex);
-    }
-  }, [highlightedIndex]);
+    if (listRef.current) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const visibleIndexes = entries
+            .filter((entry) => entry.isIntersecting)
+            .map((entry) => Number(entry.target.getAttribute("data-index")));
 
-  const onChangeHandler = (selectedOptions: string[]) => {
-    onChange && onChange(selectedOptions);
-    setIsOpen(false);
+          setVisibleItems(
+            filteredOptions.slice(
+              Math.min(...visibleIndexes, 0),
+              Math.max(...visibleIndexes, VISIBLE_ITEM_COUNT)
+            )
+          );
+        },
+        {
+          root: listRef.current,
+          rootMargin: "0px",
+          threshold: 0.1,
+        }
+      );
+
+      const listItems = listRef.current.querySelectorAll(".option-item");
+      listItems.forEach((item) => observer.observe(item));
+
+      return () => observer.disconnect();
+    }
+  }, [filteredOptions]);
+
+  const handleSelection = (option: string) => {
+    let updatedSelection = multiSelect
+      ? selectedOptions.includes(option)
+        ? selectedOptions.filter((item) => item !== option)
+        : [...selectedOptions, option]
+      : [option];
+
+    setSelectedOptions(updatedSelection);
+    onChange && onChange(updatedSelection);
+
+    if (!multiSelect) {
+      setIsOpen(false);
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
-        setHighlightedIndex((prev) => Math.min(prev + 1, options.length - 1));
+        setHighlightedIndex((prev) => Math.min(prev + 1, filteredOptions.length - 1));
         break;
       case "ArrowUp":
         event.preventDefault();
@@ -51,7 +92,7 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
       case "Enter":
         event.preventDefault();
         if (highlightedIndex >= 0) {
-          onChangeHandler([options[highlightedIndex]]);
+          handleSelection(filteredOptions[highlightedIndex]);
         }
         break;
       case "Escape":
@@ -77,57 +118,105 @@ const SelectHoc = forwardRef<HTMLDivElement, ISelectHocProps>((props, ref) => {
       aria-controls={`${id}-listbox`}
       aria-label={label}
       aria-activedescendant={highlightedIndex >= 0 ? `${id}-option-${highlightedIndex}` : undefined}
+      style={{
+        position: "relative",
+        width: props.width || "100%",
+        maxWidth: "400px",
+      }}
     >
-      <Select
-        {...props}
-        id={id}
+      {/* Search Input */}
+      <input
+        type="text"
+        placeholder="Search..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
         style={{
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          width: "100%",
+          padding: "10px",
+          border: "1px solid #ccc",
+          borderRadius: "5px",
         }}
-        aria-label={label}
-        invalid={!!error}
-        showSearch
-        onChange={(option: any) => onChangeHandler(option)}
-        getPopupContainer={() => document.querySelector("#root")}
-      >
-        {isOpen && (
-          <div
-            ref={containerRef}
-            style={{
-              height: 200,
-              overflowY: "auto",
-              position: "relative",
-              width: "100%",
-            }}
-          >
-            <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}>
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => (
-                <Option
-                  key={options[virtualRow.index]}
-                  label={options[virtualRow.index]}
-                  aria-label={options[virtualRow.index]}
-                  value={options[virtualRow.index]}
-                  id={`${id}-option-${virtualRow.index}`}
-                  aria-selected={highlightedIndex === virtualRow.index}
-                  style={{
-                    position: "absolute",
-                    top: `${virtualRow.start}px`,
-                    width: "100%",
-                    height: "40px",
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "10px",
-                  }}
-                >
-                  {options[virtualRow.index]}
-                </Option>
-              ))}
-            </div>
+      />
+
+      {/* Selected Values Display */}
+      {multiSelect && selectedOptions.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "5px",
+            padding: "5px",
+            border: "1px solid #ddd",
+            borderRadius: "5px",
+            marginTop: "5px",
+            background: "#f8f8f8",
+          }}
+        >
+          {selectedOptions.map((option) => (
+            <span
+              key={option}
+              style={{
+                background: "#007bff",
+                color: "#fff",
+                padding: "5px",
+                borderRadius: "5px",
+                fontSize: "14px",
+                cursor: "pointer",
+              }}
+              onClick={() => handleSelection(option)}
+            >
+              {option} ✖
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Dropdown List */}
+      {isOpen && (
+        <div
+          ref={containerRef}
+          style={{
+            height: ITEM_HEIGHT * VISIBLE_ITEM_COUNT,
+            overflowY: "auto",
+            position: "absolute",
+            width: "100%",
+            background: "#fff",
+            boxShadow: "0px 4px 6px rgba(0,0,0,0.1)",
+            borderRadius: "5px",
+            marginTop: "5px",
+            zIndex: 10,
+          }}
+        >
+          <div ref={listRef}>
+            {visibleItems.map((option, index) => (
+              <Option
+                key={option}
+                className="option-item"
+                data-index={index}
+                label={option}
+                aria-label={option}
+                value={option}
+                id={`${id}-option-${index}`}
+                aria-selected={highlightedIndex === index}
+                style={{
+                  width: "100%",
+                  height: `${ITEM_HEIGHT}px`,
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "10px",
+                  cursor: "pointer",
+                  backgroundColor: highlightedIndex === index ? "#007bff" : "#fff",
+                  color: highlightedIndex === index ? "#fff" : "#000",
+                }}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                onClick={() => handleSelection(option)}
+              >
+                {option}
+              </Option>
+            ))}
           </div>
-        )}
-      </Select>
+        </div>
+      )}
     </div>
   );
 });
@@ -136,9 +225,7 @@ SelectHoc.defaultProps = {
   highlightOption: true,
   mode: "default",
   tagColor: "selected",
+  multiSelect: false,
 };
 
 export default SelectHoc;
-
-
-npm install @tanstack/react-virtual
