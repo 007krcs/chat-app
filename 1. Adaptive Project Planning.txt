@@ -1,14 +1,170 @@
-if (window.top !== window.self) {
-  // If this code is running inside an iframe
-  window.top.location.href =
-    window.location.host === "uat.citigroup.com"
-      ? "https://uat.citigroup.com/global/businesses/banking/commercial-bank"
-      : "https://www.citigroup.com/global/businesses/banking/commercial-bank";
-} else {
-  // If it's already the top window
-  window.location.href =
-    window.location.host === "uat.citigroup.com"
-      ? "https://uat.citigroup.com/global/businesses/banking/commercial-bank"
-      : "https://www.citigroup.com/global/businesses/banking/commercial-bank";
+import { FC, useState, useEffect, useRef } from "react";
+import { Select, SelectProps, Option } from "@citi-icg-172888/icgds-react";
+import _ from "lodash";
+
+interface ISelectHocProps extends SelectProps {
+  options: string[];
+  onChange?: (options: string[]) => void;
+  width?: string;
+  isDisabled?: boolean;
+  error?: string;
+  label: string; // Made required for accessibility
+  id: string;    // Made required for proper labeling
 }
-window.scrollTo(0, 0);
+
+const SelectHoc: FC<ISelectHocProps> = (props) => {
+  const { onChange, options, className, id, error, label, isDisabled } = props;
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const optionsRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const onChangeHandler = (selected: string[]) => {
+    onChange && onChange(selected);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setIsOpen(true);
+        setHighlightedIndex((prev) => (prev + 1) % options.length);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setIsOpen(true);
+        setHighlightedIndex((prev) => (prev - 1 + options.length) % options.length);
+        break;
+      case "Enter":
+      case " ":
+        event.preventDefault();
+        if (isOpen && highlightedIndex >= 0) {
+          onChangeHandler([options[highlightedIndex]]);
+          setIsOpen(false);
+        } else {
+          setIsOpen(true);
+        }
+        break;
+      case "Escape":
+        event.preventDefault();
+        setIsOpen(false);
+        break;
+      default:
+        break;
+    }
+  };
+
+  useEffect(() => {
+    if (highlightedIndex >= 0 && optionsRefs.current[highlightedIndex]) {
+      optionsRefs.current[highlightedIndex]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlightedIndex]);
+
+  return (
+    <div className={className}>
+      <label id={`${id}-label`} htmlFor={id}>
+        {label}
+      </label>
+
+      <div
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={`${id}-listbox`}
+        aria-labelledby={`${id}-label`}
+        aria-activedescendant={highlightedIndex >= 0 ? `${id}-option-${highlightedIndex}` : undefined}
+        tabIndex={isDisabled ? -1 : 0}
+        onKeyDown={handleKeyDown}
+        onClick={() => setIsOpen((prev) => !prev)}
+        ref={containerRef}
+      >
+        <Select
+          {...props}
+          id={id}
+          style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          invalid={!!error}
+          showSearch
+          onChange={(option: any) => onChangeHandler(option)}
+          getPopupContainer={() => document.querySelector("#root") as HTMLElement}
+          aria-hidden={true} // Hides original from screen reader, handled manually above
+        >
+          {_.map(options, (option, index) => (
+            <Option
+              key={option}
+              label={option}
+              value={option}
+              id={`${id}-option-${index}`}
+              role="option"
+              aria-selected={highlightedIndex === index}
+              ref={(el: HTMLDivElement | null) => (optionsRefs.current[index] = el)}
+              onMouseOver={() => setHighlightedIndex(index)}
+              onClick={() => {
+                onChangeHandler([option]);
+                setIsOpen(false);
+              }}
+            >
+              {option}
+            </Option>
+          ))}
+        </Select>
+
+        {/* Custom dropdown for Accessibility */}
+        {isOpen && (
+          <ul
+            role="listbox"
+            id={`${id}-listbox`}
+            tabIndex={-1}
+            style={{
+              border: "1px solid #ccc",
+              maxHeight: "150px",
+              overflow: "auto",
+              background: "#fff",
+              position: "absolute",
+              zIndex: 1000,
+              width: "100%",
+              padding: "0",
+              margin: "4px 0 0 0",
+              listStyle: "none",
+            }}
+          >
+            {options.map((option, index) => (
+              <li
+                key={option}
+                id={`${id}-option-${index}`}
+                role="option"
+                aria-selected={highlightedIndex === index}
+                style={{
+                  padding: "8px",
+                  backgroundColor: highlightedIndex === index ? "#bde4ff" : "#fff",
+                  cursor: "pointer",
+                }}
+                ref={(el) => (optionsRefs.current[index] = el)}
+                onMouseOver={() => setHighlightedIndex(index)}
+                onMouseDown={() => {
+                  onChangeHandler([option]);
+                  setIsOpen(false);
+                }}
+              >
+                {option}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {error && (
+        <span role="alert" style={{ color: "red", marginTop: "4px", fontSize: "12px" }}>
+          {error}
+        </span>
+      )}
+    </div>
+  );
+};
+
+SelectHoc.defaultProps = {
+  highlightOption: true,
+  mode: "default",
+  tagColor: "selected",
+};
+
+export default SelectHoc;
