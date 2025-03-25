@@ -1,14 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-interface Option {
-  label: string;
-  value: string;
-}
-
 interface SelectProps {
   id: string;
   label: string;
-  options: Option[];
+  value: string[];
   selectedValues?: string[];
   multiSelect?: boolean;
   searchable?: boolean;
@@ -19,7 +14,7 @@ interface SelectProps {
 const CustomSelect: React.FC<SelectProps> = ({
   id,
   label,
-  options,
+  value = [],
   selectedValues = [],
   multiSelect = false,
   searchable = false,
@@ -28,28 +23,33 @@ const CustomSelect: React.FC<SelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selected, setSelected] = useState<string[]>(selectedValues);
+  const [selected, setSelected] = useState<string[]>(selectedValues.length ? selectedValues : []);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
   const toggleDropdown = () => setIsOpen((prev) => !prev);
 
-  const handleSelect = (value: string) => {
+  const handleSelect = (val: string) => {
     let newSelected;
 
     if (multiSelect) {
-      if (selected.includes(value)) {
-        newSelected = selected.filter((v) => v !== value);
+      if (selected.includes(val)) {
+        newSelected = selected.filter((v) => v !== val);
       } else {
-        newSelected = [...selected, value];
+        newSelected = [...selected, val];
       }
     } else {
-      newSelected = [value];
+      newSelected = [val];
       setIsOpen(false);
     }
 
     setSelected(newSelected);
     onChange && onChange(newSelected);
+  };
+
+  const clearAll = () => {
+    setSelected([]);
+    onChange && onChange([]);
   };
 
   const handleClickOutside = (event: MouseEvent) => {
@@ -64,8 +64,8 @@ const CustomSelect: React.FC<SelectProps> = ({
   }, []);
 
   const filteredOptions = searchable
-    ? options.filter((opt) => opt.label.toLowerCase().includes(searchTerm.toLowerCase()))
-    : options;
+    ? value.filter((val) => val.toLowerCase().includes(searchTerm.toLowerCase()))
+    : value;
 
   return (
     <div className="select-container" ref={containerRef}>
@@ -81,8 +81,8 @@ const CustomSelect: React.FC<SelectProps> = ({
         onKeyDown={(e) => { if (e.key === 'Enter') toggleDropdown(); }}
       >
         {multiSelect
-          ? selected.length ? `${label} (${selected.length})` : placeholder
-          : options.find((o) => o.value === selected[0])?.label || placeholder}
+          ? selected.length ? selected.join(', ') : placeholder
+          : selected[0] || placeholder}
       </div>
 
       {isOpen && (
@@ -98,29 +98,32 @@ const CustomSelect: React.FC<SelectProps> = ({
           )}
 
           <ul>
-            {filteredOptions.map((option) => (
+            {filteredOptions.map((val) => (
               <li
-                key={option.value}
+                key={val}
                 role="option"
-                aria-selected={selected.includes(option.value)}
+                aria-selected={selected.includes(val)}
                 tabIndex={0}
-                className={`dropdown-option ${selected.includes(option.value) ? 'selected' : ''}`}
-                onClick={() => handleSelect(option.value)}
+                className={`dropdown-option ${selected.includes(val) ? 'selected' : ''}`}
+                onClick={() => handleSelect(val)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') handleSelect(option.value);
+                  if (e.key === 'Enter' || e.key === ' ') handleSelect(val);
                 }}
               >
                 {multiSelect && (
-                  <input type="checkbox" readOnly checked={selected.includes(option.value)} />
+                  <input type="checkbox" readOnly checked={selected.includes(val)} />
                 )}
-                {option.label}
+                {val}
               </li>
             ))}
           </ul>
 
-          {multiSelect && (
+          <div className="dropdown-footer">
+            {multiSelect && (
+              <button className="clear-btn" onClick={clearAll}>Clear All</button>
+            )}
             <button className="apply-btn" onClick={() => setIsOpen(false)}>Apply</button>
-          )}
+          </div>
         </div>
       )}
     </div>
