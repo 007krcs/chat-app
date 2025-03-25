@@ -5,10 +5,11 @@ interface SelectProps {
   label: string;
   value: string[];
   selectedValues?: string[];
+  selectedValue?: string;
   multiSelect?: boolean;
   searchable?: boolean;
   placeholder?: string;
-  onChange?: (values: string[]) => void;
+  onChange?: (values: string[] | string) => void;
 }
 
 const CustomSelect: React.FC<SelectProps> = ({
@@ -16,6 +17,7 @@ const CustomSelect: React.FC<SelectProps> = ({
   label,
   value = [],
   selectedValues = [],
+  selectedValue = '',
   multiSelect = false,
   searchable = false,
   placeholder = 'Select...',
@@ -23,7 +25,9 @@ const CustomSelect: React.FC<SelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selected, setSelected] = useState<string[]>(selectedValues.length ? selectedValues : []);
+  const [selected, setSelected] = useState<string[]>(
+    multiSelect ? selectedValues : selectedValue ? [selectedValue] : []
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -44,12 +48,12 @@ const CustomSelect: React.FC<SelectProps> = ({
     }
 
     setSelected(newSelected);
-    onChange && onChange(newSelected);
+    onChange && onChange(multiSelect ? newSelected : newSelected[0]);
   };
 
   const clearAll = () => {
     setSelected([]);
-    onChange && onChange([]);
+    onChange && onChange(multiSelect ? [] : '');
   };
 
   const handleClickOutside = (event: MouseEvent) => {
