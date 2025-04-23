@@ -1,4 +1,27 @@
-.lmn-control-input[type="radio"]:focus + .lmn-control-icon {
-  outline: 2px solid #005fcc;
-  outline-offset: 2px;
-}
+export const handleScript = (ref: any, param: string) => {
+  // Clear existing content
+  if (!ref.current) return;
+  ref.current.innerHTML = '';
+
+  // Create a script element
+  const script = document.createElement('script');
+  script.type = 'text/javascript';
+
+  const targetUrl = window.location.host.includes('uat')
+    ? 'https://uat.citigroup.com/'
+    : 'https://www.citigroup.com/';
+
+  const scriptCode = `
+    try {
+      var postObject = JSON.stringify({ event: "${param}" });
+      parent.postMessage(postObject, "${targetUrl}");
+    } catch(e) {
+      window.console && window.console.log(e);
+    }
+  `;
+
+  script.text = scriptCode;
+
+  // Append script directly so it executes
+  ref.current.appendChild(script);
+};
