@@ -1,27 +1,117 @@
-export const handleScript = (ref: any, param: string) => {
-  // Clear existing content
-  if (!ref.current) return;
-  ref.current.innerHTML = '';
+import { FC, useState, useEffect, useRef } from "react";
+import { Select, SelectProps, Option } from "@citi-icg-172888/icgds-react";
+import _ from "lodash";
 
-  // Create a script element
-  const script = document.createElement('script');
-  script.type = 'text/javascript';
+interface ISelectHocProps extends SelectProps {
+  options: string[];
+  onChange?: (options: string[]) => void;
+  width?: string;
+  isDisabled?: boolean;
+  error?: string;
+  label?: string;
+  ref?: any;
+}
 
-  const targetUrl = window.location.host.includes('uat')
-    ? 'https://uat.citigroup.com/'
-    : 'https://www.citigroup.com/';
+const SelectHoc: FC<ISelectHocProps> = (props) => {
+  const { onChange, options, className, id, error, label, ref } = props;
+  const onChangeHandler = (selectedOptions: string[]) => {
+    onChange && onChange(selectedOptions);
+  };
+  
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const optionsRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
-  const scriptCode = `
-    try {
-      var postObject = JSON.stringify({ event: "${param}" });
-      parent.postMessage(postObject, "${targetUrl}");
-    } catch(e) {
-      window.console && window.console.log(e);
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        setHighlightedIndex((prevIndex) => (prevIndex + 1) % options.length);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        setHighlightedIndex((prevIndex) => (prevIndex - 1 + options.length) % options.length);
+        break;
+      case "Enter":
+      case "Escape":
+        event.preventDefault();
+        if (highlightedIndex >= 0) {
+          const selectedValue = options[highlightedIndex];
+          setSelectedOption(selectedValue);
+          onChangeHandler([selectedValue]);
+        }
+        setIsOpen(false);
+        break;
+      default:
+        break;
     }
-  `;
+  };
 
-  script.text = scriptCode;
+  useEffect(() => {
+    if (highlightedIndex >= 0 && optionsRefs.current[highlightedIndex]) {
+      optionsRefs.current[highlightedIndex]?.focus();
+    }
+  }, [highlightedIndex]);
 
-  // Append script directly so it executes
-  ref.current.appendChild(script);
+  return (
+    <div
+      className={className}
+      onKeyDown={handleKeyDown}
+      ref={ref}
+      onFocus={() => setIsOpen(true)}
+      onBlur={() => setIsOpen(false)}
+      aria-expanded={isOpen}
+      role="combobox"
+      aria-haspopup="listbox"
+      aria-owns="select-options"
+      aria-controls="select-options"
+      aria-activedescendant={
+        highlightedIndex >= 0 ? `option-${highlightedIndex}` : undefined
+      }
+    >
+      <Select
+        {...props}
+        id={id}
+        size="default"
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+        aria-label={label}
+        invalid={!!error}
+        showSearch
+        placeholder="Please select"
+        onChange={(option: any) => {
+          setSelectedOption(option);
+          onChangeHandler([option]);
+        }}
+        getPopupContainer={() => document.querySelector("#root")}
+      >
+        {_.map(options, (option, index) => (
+          <Option
+            key={option}
+            id={`option-${index}`}
+            role="option"
+            label={option}
+            aria-label={option}
+            aria-selected={selectedOption === option}
+            value={option}
+            ref={(el: HTMLDivElement | null) => (optionsRefs.current[index] = el)}
+          >
+            {option}
+          </Option>
+        ))}
+      </Select>
+    </div>
+  );
 };
+
+SelectHoc.defaultProps = {
+  highlightOption: true,
+  mode: "default",
+  tagColor: "selected",
+};
+
+export default SelectHoc;
