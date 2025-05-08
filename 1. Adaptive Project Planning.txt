@@ -14,14 +14,14 @@ interface ISelectHocProps extends SelectProps {
 
 const SelectHoc: FC<ISelectHocProps> = (props) => {
   const { onChange, options, className, id, error, label, ref } = props;
-  const onChangeHandler = (selectedOptions: string[]) => {
-    onChange && onChange(selectedOptions);
+  const onChangeHandler = (options: string[]) => {
+    onChange && onChange(options);
   };
   
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const optionsRefs = useRef<(HTMLDivElement | null)[]>([]);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+  const optionsRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     switch (event.key) {
@@ -34,13 +34,15 @@ const SelectHoc: FC<ISelectHocProps> = (props) => {
         setHighlightedIndex((prevIndex) => (prevIndex - 1 + options.length) % options.length);
         break;
       case "Enter":
-      case "Escape":
         event.preventDefault();
         if (highlightedIndex >= 0) {
           const selectedValue = options[highlightedIndex];
           setSelectedOption(selectedValue);
           onChangeHandler([selectedValue]);
+          setIsOpen(false);
         }
+        break;
+      case "Escape":
         setIsOpen(false);
         break;
       default:
@@ -61,67 +63,51 @@ const SelectHoc: FC<ISelectHocProps> = (props) => {
       ref={ref}
       onFocus={() => setIsOpen(true)}
       onBlur={() => setIsOpen(false)}
-      aria-expanded={isOpen}
       role="combobox"
       aria-haspopup="listbox"
-      aria-owns="select-options"
-      aria-controls="select-options"
+      aria-expanded={isOpen}
       aria-label={label}
-      aria-activedescendant={
-        highlightedIndex >= 0 ? `option-${highlightedIndex}` : undefined
-      }
+      aria-activedescendant={highlightedIndex >= 0 ? `option-${highlightedIndex}` : undefined}
     >
       <Select
         {...props}
         id={id}
         size="default"
-        optionLabelProp="label"
-        optionFilterProp="label"
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
         aria-label={label}
         invalid={!!error}
         showSearch
         placeholder="Please select"
         onChange={(option: any) => {
           setSelectedOption(option);
-          onChangeHandler([option]);
+          onChangeHandler(option);
         }}
         getPopupContainer={() => document.querySelector("#root")}
       >
         {_.map(options, (option, index) => (
-          <div
+          <Option
+            key={option}
             id={`option-${index}`}
-            role="option"
+            label={option}
+            aria-label={option}
             aria-selected={selectedOption === option}
+            value={option}
             ref={(el: HTMLDivElement | null) => (optionsRefs.current[index] = el)}
-            tabIndex={-1}
-            style={{
-              padding: "8px",
-              backgroundColor: selectedOption === option ? "#e0e0e0" : "transparent",
-              fontWeight: selectedOption === option ? "bold" : "normal",
-              cursor: "pointer",
-            }}
-            onClick={() => {
-              setSelectedOption(option);
-              onChangeHandler([option]);
-              setIsOpen(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                setSelectedOption(option);
-                onChangeHandler([option]);
-                setIsOpen(false);
-              }
-            }}
           >
             {option}
-          </div>
+          </Option>
         ))}
       </Select>
 
-      {/* Announce selected value for NVDA */}
+      {/* Screen reader live region for announcing selection */}
       <div 
         aria-live="assertive" 
-        style={{ position: "absolute", height: 0, width: 0, overflow: "hidden" }}>
+        style={{ position: "absolute", height: 0, width: 0, overflow: "hidden" }}
+      >
         {selectedOption ? `Selected ${selectedOption}` : ""}
       </div>
     </div>
