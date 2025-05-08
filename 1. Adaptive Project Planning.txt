@@ -66,6 +66,7 @@ const SelectHoc: FC<ISelectHocProps> = (props) => {
       aria-haspopup="listbox"
       aria-owns="select-options"
       aria-controls="select-options"
+      aria-label={label}
       aria-activedescendant={
         highlightedIndex >= 0 ? `option-${highlightedIndex}` : undefined
       }
@@ -74,11 +75,8 @@ const SelectHoc: FC<ISelectHocProps> = (props) => {
         {...props}
         id={id}
         size="default"
-        style={{
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
+        optionLabelProp="label"
+        optionFilterProp="label"
         aria-label={label}
         invalid={!!error}
         showSearch
@@ -90,20 +88,42 @@ const SelectHoc: FC<ISelectHocProps> = (props) => {
         getPopupContainer={() => document.querySelector("#root")}
       >
         {_.map(options, (option, index) => (
-          <Option
-            key={option}
+          <div
             id={`option-${index}`}
             role="option"
-            label={option}
-            aria-label={option}
             aria-selected={selectedOption === option}
-            value={option}
             ref={(el: HTMLDivElement | null) => (optionsRefs.current[index] = el)}
+            tabIndex={-1}
+            style={{
+              padding: "8px",
+              backgroundColor: selectedOption === option ? "#e0e0e0" : "transparent",
+              fontWeight: selectedOption === option ? "bold" : "normal",
+              cursor: "pointer",
+            }}
+            onClick={() => {
+              setSelectedOption(option);
+              onChangeHandler([option]);
+              setIsOpen(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                setSelectedOption(option);
+                onChangeHandler([option]);
+                setIsOpen(false);
+              }
+            }}
           >
             {option}
-          </Option>
+          </div>
         ))}
       </Select>
+
+      {/* Announce selected value for NVDA */}
+      <div 
+        aria-live="assertive" 
+        style={{ position: "absolute", height: 0, width: 0, overflow: "hidden" }}>
+        {selectedOption ? `Selected ${selectedOption}` : ""}
+      </div>
     </div>
   );
 };
