@@ -1,123 +1,28 @@
-import { FC, useState, useEffect, useRef } from "react";
-import { Select, SelectProps, Option } from "@citi-icg-172888/icgds-react";
-import _ from "lodash";
+Dear All,
 
-interface ISelectHocProps extends SelectProps {
-  options: string[];
-  onChange?: (options: string[]) => void;
-  width?: string;
-  isDisabled?: boolean;
-  error?: string;
-  label?: string;
-  ref?: any;
-}
+The Department of Agriculture, Maharashtra State, is organizing the 1st International Hackathon to solve agricultural problems.
+All project coordinators/ HoIs are requested to circulate among students to register.
 
-const SelectHoc: FC<ISelectHocProps> = (props) => {
-  const { onChange, options, className, id, error, label, ref } = props;
-  const onChangeHandler = (options: string[]) => {
-    onChange && onChange(options);
-  };
-  
-  const [isOpen, setIsOpen] = useState(false);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const optionsRefs = useRef<(HTMLDivElement | null)[]>([]);
+A google form will be floated to know the registration from university, which will also help to facilitate teams to groom final ppts and making videos. Also helping to form multidisciplinary teams. 
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    switch (event.key) {
-      case "ArrowDown":
-        event.preventDefault();
-        setHighlightedIndex((prevIndex) => (prevIndex + 1) % options.length);
-        break;
-      case "ArrowUp":
-        event.preventDefault();
-        setHighlightedIndex((prevIndex) => (prevIndex - 1 + options.length) % options.length);
-        break;
-      case "Enter":
-        event.preventDefault();
-        if (highlightedIndex >= 0) {
-          const selectedValue = options[highlightedIndex];
-          setSelectedOption(selectedValue);
-          onChangeHandler([selectedValue]);
-          setIsOpen(false);
-        }
-        break;
-      case "Escape":
-        setIsOpen(false);
-        break;
-      default:
-        break;
-    }
-  };
+Submission Deadline:
+15th May 2025
 
-  useEffect(() => {
-    if (highlightedIndex >= 0 && optionsRefs.current[highlightedIndex]) {
-      optionsRefs.current[highlightedIndex]?.focus();
-    }
-  }, [highlightedIndex]);
+Prizes:
+Winner will get cash prize of Rs.25 Lakh (8 winners from each sector)
+Runner-up will get cash prize of Rs.15 Lakh (8 winners from each sector)
+Themes:
+Artificial Intelligence in Agriculture sector
+Soil/water conservation, Irrigation, Soil health management
+Farm Mechanization
+Fertigation and Disease/pest management
+Energy
+Post Harvest Technology and Waste Management
+Agri. Economics, Market linkages
+Any other disruptive agri-tech innovation that is not part of the list above
+Individuals and Teams can participate (Team size maximum 5 people)
 
-  return (
-    <div
-      className={className}
-      onKeyDown={handleKeyDown}
-      ref={ref}
-      onFocus={() => setIsOpen(true)}
-      onBlur={() => setIsOpen(false)}
-      role="combobox"
-      aria-haspopup="listbox"
-      aria-expanded={isOpen}
-      aria-label={label}
-      aria-activedescendant={highlightedIndex >= 0 ? `option-${highlightedIndex}` : undefined}
-    >
-      <Select
-        {...props}
-        id={id}
-        size="default"
-        style={{
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-        aria-label={label}
-        invalid={!!error}
-        showSearch
-        placeholder="Please select"
-        onChange={(option: any) => {
-          setSelectedOption(option);
-          onChangeHandler(option);
-        }}
-        getPopupContainer={() => document.querySelector("#root")}
-      >
-        {_.map(options, (option, index) => (
-          <Option
-            key={option}
-            id={`option-${index}`}
-            label={option}
-            aria-label={option}
-            aria-selected={selectedOption === option}
-            value={option}
-            ref={(el: HTMLDivElement | null) => (optionsRefs.current[index] = el)}
-          >
-            {option}
-          </Option>
-        ))}
-      </Select>
-
-      {/* Screen reader live region for announcing selection */}
-      <div 
-        aria-live="assertive" 
-        style={{ position: "absolute", height: 0, width: 0, overflow: "hidden" }}
-      >
-        {selectedOption ? `Selected ${selectedOption}` : ""}
-      </div>
-    </div>
-  );
-};
-
-SelectHoc.defaultProps = {
-  highlightOption: true,
-  mode: "default",
-  tagColor: "selected",
-};
-
-export default SelectHoc;
+Documents Required
+Team details
+Pitch deck (5 slides max)
+Video (1-2 min explaining innovation)
