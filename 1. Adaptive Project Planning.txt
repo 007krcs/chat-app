@@ -1,60 +1,37 @@
-// props from parent
-function ChecklistGrid({ isCaseDisabled, isNewRequest, rowData }) {
-  const [gridApi, setGridApi] = React.useState(null);
+useEffect(() => {
+  if (!gridApi) return;
 
-  const columnDefs = React.useMemo(() => [
-    {
-      field: 'nameAndDetailsSearchHelper',
-      width: 45,
+  const defs = gridApi.getColumnDefs() || [];
+  if (!defs.length) return;
 
-      checkboxSelection: (p) => {
-        const { isCaseDisabled, isNewRequest } = p.context || {};
-        if (isCaseDisabled && !isNewRequest) {
-          const docs = p?.data?.predefDocs || [];
-          return docs.some(d => d.documentId === p.data.documentId && d.selected === true);
-        }
-        return true;
-      },
+  const first = defs[0];
+  const nextFirst = {
+    ...first,
 
-      showDisabledCheckboxes: (p) => {
-        const { isCaseDisabled, isNewRequest } = p.context || {};
-        return isCaseDisabled && !isNewRequest;
-      },
-
-      headerCheckboxSelection: (p) => {
-        const { isCaseDisabled, isNewRequest } = p.context || {};
-        return !(isCaseDisabled && !isNewRequest);
-      },
-
-      headerClass: (p) => {
-        const { isCaseDisabled, isNewRequest } = p.context || {};
-        return isCaseDisabled && !isNewRequest ? 'pointer-events custom-disabled-checkbox' : '';
-      },
+    // show greyed checkbox only in disabled mode
+    showDisabledCheckboxes: (params) => {
+      if (isCaseDisabled && !isNewRequest) {
+        const list = params?.data?.predefDocs || [];
+        return list.some(d => d.documentId === params.data.documentId && d.selected === true);
+      }
+      return false;
     },
-    // ...other cols
-  ], []); // keep callbacks stable; they read from context
 
+    // allow selecting rows when not disabled (after Claim)
+    checkboxSelection: (params) => {
+      if (isCaseDisabled && !isNewRequest) {
+        const list = params?.data?.predefDocs || [];
+        return list.some(d => d.documentId === params.data.documentId && d.selected === true);
+      }
+      return true;
+    },
 
-  const onGridReady = (e) => setGridApi(e.api);
+    headerCheckboxSelection: () => !(isCaseDisabled && !isNewRequest),
+    headerClass: () =>
+      (isCaseDisabled && !isNewRequest) ? 'pointer-events custom-disabled-checkbox' : '',
+  };
 
-  // 👉 when parent props change, sync them into AG Grid and refresh
-  React.useEffect(() => {
-    if (!gridApi) return;
-
-    const ctx = gridApi.getGridOption('context') || {};
-    gridApi.setGridOption('context', { ...ctx, isCaseDisabled, isNewRequest });
-
-    gridApi.refreshHeader();
-    gridApi.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
-  }, [gridApi, isCaseDisabled, isNewRequest]);
-
-  return (
-    <AgGridReact
-      rowData={rowData}
-      columnDefs={columnDefs}
-      context={{ isCaseDisabled, isNewRequest }}   // initial mount value
-      onGridReady={onGridReady}
-      // ...other options you had
-    />
-  );
-}
+  gridApi.setColumnDefs([nextFirst, ...defs.slice(1)]);
+  gridApi.refreshHeader();
+  gridApi.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
+}, [isCaseDisabled, isNewRequest, gridApi]);
