@@ -1,19 +1,60 @@
-useEffect(() => {
-  setGridOptions(prev => ({
-    ...prev,
-    // optional: also keep a context copy
-    context: { ...(prev.context || {}), isNewRequest },
+// props from parent
+function ChecklistGrid({ isCaseDisabled, isNewRequest, rowData }) {
+  const [gridApi, setGridApi] = React.useState(null);
 
-    // give columnDefs a NEW reference so AG Grid re-evaluates functions
-    columnDefs: prev.columnDefs.map((c, i) =>
-      i === 0
-        ? {
-            ...c,
-            // if you prefer reading from closure instead of context:
-            showDisabledCheckboxes: (params) => /* logic using isNewRequest */,
-            checkboxSelection: (params) => /* logic using isNewRequest */,
-          }
-        : c
-    ),
-  }));
-}, [isNewRequest]);
+  const columnDefs = React.useMemo(() => [
+    {
+      field: 'nameAndDetailsSearchHelper',
+      width: 45,
+
+      checkboxSelection: (p) => {
+        const { isCaseDisabled, isNewRequest } = p.context || {};
+        if (isCaseDisabled && !isNewRequest) {
+          const docs = p?.data?.predefDocs || [];
+          return docs.some(d => d.documentId === p.data.documentId && d.selected === true);
+        }
+        return true;
+      },
+
+      showDisabledCheckboxes: (p) => {
+        const { isCaseDisabled, isNewRequest } = p.context || {};
+        return isCaseDisabled && !isNewRequest;
+      },
+
+      headerCheckboxSelection: (p) => {
+        const { isCaseDisabled, isNewRequest } = p.context || {};
+        return !(isCaseDisabled && !isNewRequest);
+      },
+
+      headerClass: (p) => {
+        const { isCaseDisabled, isNewRequest } = p.context || {};
+        return isCaseDisabled && !isNewRequest ? 'pointer-events custom-disabled-checkbox' : '';
+      },
+    },
+    // ...other cols
+  ], []); // keep callbacks stable; they read from context
+
+
+  const onGridReady = (e) => setGridApi(e.api);
+
+  // 👉 when parent props change, sync them into AG Grid and refresh
+  React.useEffect(() => {
+    if (!gridApi) return;
+
+    const ctx = gridApi.getGridOption('context') || {};
+    gridApi.setGridOption('context', { ...ctx, isCaseDisabled, isNewRequest });
+
+    gridApi.refreshHeader();
+    gridApi.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
+  }, [gridApi, isCaseDisabled, isNewRequest]);
+
+  return (
+    <AgGridReact
+      rowData={rowData}
+      columnDefs={columnDefs}
+      context={{ isCaseDisabled, isNewRequest }}   // initial mount value
+      onGridReady={onGridReady}
+      // ...other options you had
+    />
+  );
+}
