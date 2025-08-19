@@ -1,32 +1,19 @@
-Dear All,
+useEffect(() => {
+  setGridOptions(prev => ({
+    ...prev,
+    // optional: also keep a context copy
+    context: { ...(prev.context || {}), isNewRequest },
 
-The Department of Agriculture, Maharashtra State, is organizing the 1st International Hackathon to solve agricultural problems.
-All project coordinators/ HoIs are requested to circulate among students to register.
-
-A google form will be floated to know the registration from university, which will also help to facilitate teams to groom final ppts and making videos. Also helping to form multidisciplinary teams. 
-
-Submission Deadline:
-15th May 2025
-
-Prizes:
-Winner will get cash prize of Rs.25 Lakh (8 winners from each sector)
-Runner-up will get cash prize of Rs.15 Lakh (8 winners from each sector)
-Themes:
-Artificial Intelligence in Agriculture sector
-Soil/water conservation, Irrigation, Soil health management
-Farm Mechanization
-Fertigation and Disease/pest management
-Energy
-Post Harvest Technology and Waste Management
-Agri. Economics, Market linkages
-Any other disruptive agri-tech innovation that is not part of the list above
-Individuals and Teams can participate (Team size maximum 5 people)
-
-Documents Required
-Team details
-Pitch deck (5 slides max)
-Video (1-2 min explaining innovation)
-
-
-
-https://www.linkedin.com/posts/bharathive_smartagrox-agriculturetechnology-aipoweredagriculture-activity-7328437564242063360-vYSZ?utm_source=share&utm_medium=member_desktop&rcm=ACoAACRntwoBvnbK4TTHfN5g_0RL40eKAf3Itjs
+    // give columnDefs a NEW reference so AG Grid re-evaluates functions
+    columnDefs: prev.columnDefs.map((c, i) =>
+      i === 0
+        ? {
+            ...c,
+            // if you prefer reading from closure instead of context:
+            showDisabledCheckboxes: (params) => /* logic using isNewRequest */,
+            checkboxSelection: (params) => /* logic using isNewRequest */,
+          }
+        : c
+    ),
+  }));
+}, [isNewRequest]);
