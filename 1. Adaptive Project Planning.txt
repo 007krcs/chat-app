@@ -1,37 +1,63 @@
-// keep the api
-const [api, setApi] = useState<GridApi|null>(null);
-const onGridReady = (e: GridReadyEvent) => setApi(e.api);
+That error means `autoSizeColumns` got the **wrong argument shape**.
+Your AG Grid version expects an **array of column IDs**, but it received an object (e.g., `{ columns: [...] }`), so inside AG Grid it tried to do `colKeys.forEach(...)` on a non-array.
 
-// helper to size columns (content-based)
-const autoSize = useCallback(() => {
+Use this safe helper that works across versions:
+
+```ts
+import type { GridApi } from 'ag-grid-community';
+
+const autoSizeAll = (api: GridApi | null) => {
   if (!api) return;
-  const cols = api.getColumns()?.map(c => c.getColId()) ?? [];
-  if (cols.length) {
-    // v31+ has autosize on Grid API
-    // if your version doesn't, fall back to sizeColumnsToFit()
-    try { (api as any).autoSizeColumns({ columns: cols, skipHeader: false }); }
-    catch { (api as any).sizeColumnsToFit(); }
-  }
-}, [api]);
 
-// after you update context/refresh, also autosize on the next frame
+  // get array of column IDs
+  const colIds = (api.getColumns() || []).map(c => c.getColId());
+  if (!colIds.length) return;
+
+  const anyApi = api as any;
+
+  // Try legacy/array signature first
+  try {
+    anyApi.autoSizeColumns(colIds);                   // v29–v30 (or columnApi equivalent)
+  } catch {
+    try {
+      anyApi.autoSizeColumns({ columns: colIds });    // v31+ object signature
+    } catch {
+      // Fallback if autosize not available
+      anyApi.sizeColumnsToFit?.();
+    }
+  }
+};
+```
+
+Then call it where you were doing `requestAnimationFrame(...)`:
+
+```ts
 useEffect(() => {
   if (!api) return;
 
-  // your existing context update + refresh
   const ctx = api.getGridOption('context') || {};
   api.setGridOption('context', { ...ctx, isCaseDisabled, isNewRequest });
   api.refreshHeader();
   api.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
 
-  // 👇 prevent “shrunk columns” by resizing now
-  requestAnimationFrame(autoSize);
-}, [api, isCaseDisabled, isNewRequest, autoSize]);
+  // run autosize on the next frame
+  requestAnimationFrame(() => autoSizeAll(api));
+}, [api, isCaseDisabled, isNewRequest]);
+```
 
-// also handle initial render / container resizes
-<AgGridReact
-  onGridReady={onGridReady}
-  onFirstDataRendered={() => requestAnimationFrame(autoSize)}
-  onGridSizeChanged={autoSize}
-  // ...rest of your props
-/>
+A few sizing tips to avoid shrinking:
+
+* Don’t set `flex: 1` globally. Use fixed `minWidth`/`maxWidth` on tight columns (e.g., checkbox: `width/minWidth/maxWidth: 45`).
+* Run autosize after data is rendered as well:
+
+  ```ts
+  <AgGridReact onFirstDataRendered={() => autoSizeAll(api)} onGridSizeChanged={() => autoSizeAll(api)} />
+  ```
+* If you’re on older AG Grid, you might need `columnApi`:
+
+  ```ts
+  const colApi = (api as any).columnApi;
+  colApi?.autoSizeColumns(colIds);
+  ```
+
+This will clear the `colKeys.forEach is not a function` error and keep your columns sized correctly without manual resizing.
