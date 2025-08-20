@@ -1,92 +1,37 @@
-You’re still mutating `gridOptions` with `setGridOptions(...)`. AG Grid reads that object **once**. Changing it later won’t re-run your first-column functions. That’s why your value never flips.
+// keep the api
+const [api, setApi] = useState<GridApi|null>(null);
+const onGridReady = (e: GridReadyEvent) => setApi(e.api);
 
-Use this tiny, working pattern:
+// helper to size columns (content-based)
+const autoSize = useCallback(() => {
+  if (!api) return;
+  const cols = api.getColumns()?.map(c => c.getColId()) ?? [];
+  if (cols.length) {
+    // v31+ has autosize on Grid API
+    // if your version doesn't, fall back to sizeColumnsToFit()
+    try { (api as any).autoSizeColumns({ columns: cols, skipHeader: false }); }
+    catch { (api as any).sizeColumnsToFit(); }
+  }
+}, [api]);
 
-### 1) Define the first column **once** and read flags from `params.context`
-
-```tsx
-const gridRef = useRef(null);
-
-const columnDefs = useMemo(() => [
-  {
-    field: 'nameAndDetailsSearchHelper',
-    width: 45,
-
-    checkboxSelection: (p) => {
-      const { isCaseDisabled, isNewRequest } = p.context || {};
-      if (isCaseDisabled && !isNewRequest) {
-        const list = p?.data?.predefDocs || [];
-        return list.some(d => d.documentId === p.data.documentId && d.selected === true);
-      }
-      return true;
-    },
-
-    showDisabledCheckboxes: (p) => {
-      const { isCaseDisabled, isNewRequest } = p.context || {};
-      return isCaseDisabled && !isNewRequest;
-    },
-
-    headerCheckboxSelection: (p) => {
-      const { isCaseDisabled, isNewRequest } = p.context || {};
-      return !(isCaseDisabled && !isNewRequest);
-    },
-
-    headerClass: (p) => {
-      const { isCaseDisabled, isNewRequest } = p.context || {};
-      return isCaseDisabled && !isNewRequest ? 'pointer-events custom-disabled-checkbox' : '';
-    },
-  },
-  // …other columns
-], []);
-```
-
-### 2) Push parent props into **context** and refresh (this is the part you put in `useEffect`)
-
-```tsx
+// after you update context/refresh, also autosize on the next frame
 useEffect(() => {
-  const api = gridRef.current?.api;
   if (!api) return;
 
-  // update the grid context with latest parent values
+  // your existing context update + refresh
   const ctx = api.getGridOption('context') || {};
   api.setGridOption('context', { ...ctx, isCaseDisabled, isNewRequest });
-
-  // re-evaluate first-column callbacks + header CSS
   api.refreshHeader();
   api.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
-}, [isCaseDisabled, isNewRequest]);
-```
 
-### 3) Mount the grid (do **not** spread a `gridOptions` object)
+  // 👇 prevent “shrunk columns” by resizing now
+  requestAnimationFrame(autoSize);
+}, [api, isCaseDisabled, isNewRequest, autoSize]);
 
-```tsx
+// also handle initial render / container resizes
 <AgGridReact
-  ref={gridRef}
-  rowData={rowData}
-  columnDefs={columnDefs}
-  context={{ isCaseDisabled, isNewRequest }}   // initial values; kept in sync by the effect above
-  onGridReady={(e) => {
-    // ensure context is set at init as well
-    e.api.setGridOption('context', { isCaseDisabled, isNewRequest });
-  }}
+  onGridReady={onGridReady}
+  onFirstDataRendered={() => requestAnimationFrame(autoSize)}
+  onGridSizeChanged={autoSize}
+  // ...rest of your props
 />
-```
-
-> Key points
-
-* **Don’t** update `gridOptions` with `setGridOptions`—AG Grid won’t re-read it.
-* Read dynamic flags from `params.context`.
-* When the parent changes `isCaseDisabled` / `isNewRequest`, update context via `api.setGridOption('context', …)` then `api.refreshHeader()` and `api.refreshCells()`.
-
-If you must keep a single `gridOptions` object, the only reliable way is:
-
-```tsx
-const api = gridRef.current.api;
-api.setGridOption('context', { ...api.getGridOption('context'), isCaseDisabled, isNewRequest });
-// or rebuild column defs:
-api.setGridOption('columnDefs', [ /* new first col */, ...rest ]);
-api.refreshHeader();
-api.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
-```
-
-Follow the three steps above and your first column will flip immediately after Claim.
