@@ -1,37 +1,92 @@
-useEffect(() => {
-  if (!gridApi) return;
+You’re still mutating `gridOptions` with `setGridOptions(...)`. AG Grid reads that object **once**. Changing it later won’t re-run your first-column functions. That’s why your value never flips.
 
-  const defs = gridApi.getColumnDefs() || [];
-  if (!defs.length) return;
+Use this tiny, working pattern:
 
-  const first = defs[0];
-  const nextFirst = {
-    ...first,
+### 1) Define the first column **once** and read flags from `params.context`
 
-    // show greyed checkbox only in disabled mode
-    showDisabledCheckboxes: (params) => {
+```tsx
+const gridRef = useRef(null);
+
+const columnDefs = useMemo(() => [
+  {
+    field: 'nameAndDetailsSearchHelper',
+    width: 45,
+
+    checkboxSelection: (p) => {
+      const { isCaseDisabled, isNewRequest } = p.context || {};
       if (isCaseDisabled && !isNewRequest) {
-        const list = params?.data?.predefDocs || [];
-        return list.some(d => d.documentId === params.data.documentId && d.selected === true);
-      }
-      return false;
-    },
-
-    // allow selecting rows when not disabled (after Claim)
-    checkboxSelection: (params) => {
-      if (isCaseDisabled && !isNewRequest) {
-        const list = params?.data?.predefDocs || [];
-        return list.some(d => d.documentId === params.data.documentId && d.selected === true);
+        const list = p?.data?.predefDocs || [];
+        return list.some(d => d.documentId === p.data.documentId && d.selected === true);
       }
       return true;
     },
 
-    headerCheckboxSelection: () => !(isCaseDisabled && !isNewRequest),
-    headerClass: () =>
-      (isCaseDisabled && !isNewRequest) ? 'pointer-events custom-disabled-checkbox' : '',
-  };
+    showDisabledCheckboxes: (p) => {
+      const { isCaseDisabled, isNewRequest } = p.context || {};
+      return isCaseDisabled && !isNewRequest;
+    },
 
-  gridApi.setColumnDefs([nextFirst, ...defs.slice(1)]);
-  gridApi.refreshHeader();
-  gridApi.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
-}, [isCaseDisabled, isNewRequest, gridApi]);
+    headerCheckboxSelection: (p) => {
+      const { isCaseDisabled, isNewRequest } = p.context || {};
+      return !(isCaseDisabled && !isNewRequest);
+    },
+
+    headerClass: (p) => {
+      const { isCaseDisabled, isNewRequest } = p.context || {};
+      return isCaseDisabled && !isNewRequest ? 'pointer-events custom-disabled-checkbox' : '';
+    },
+  },
+  // …other columns
+], []);
+```
+
+### 2) Push parent props into **context** and refresh (this is the part you put in `useEffect`)
+
+```tsx
+useEffect(() => {
+  const api = gridRef.current?.api;
+  if (!api) return;
+
+  // update the grid context with latest parent values
+  const ctx = api.getGridOption('context') || {};
+  api.setGridOption('context', { ...ctx, isCaseDisabled, isNewRequest });
+
+  // re-evaluate first-column callbacks + header CSS
+  api.refreshHeader();
+  api.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
+}, [isCaseDisabled, isNewRequest]);
+```
+
+### 3) Mount the grid (do **not** spread a `gridOptions` object)
+
+```tsx
+<AgGridReact
+  ref={gridRef}
+  rowData={rowData}
+  columnDefs={columnDefs}
+  context={{ isCaseDisabled, isNewRequest }}   // initial values; kept in sync by the effect above
+  onGridReady={(e) => {
+    // ensure context is set at init as well
+    e.api.setGridOption('context', { isCaseDisabled, isNewRequest });
+  }}
+/>
+```
+
+> Key points
+
+* **Don’t** update `gridOptions` with `setGridOptions`—AG Grid won’t re-read it.
+* Read dynamic flags from `params.context`.
+* When the parent changes `isCaseDisabled` / `isNewRequest`, update context via `api.setGridOption('context', …)` then `api.refreshHeader()` and `api.refreshCells()`.
+
+If you must keep a single `gridOptions` object, the only reliable way is:
+
+```tsx
+const api = gridRef.current.api;
+api.setGridOption('context', { ...api.getGridOption('context'), isCaseDisabled, isNewRequest });
+// or rebuild column defs:
+api.setGridOption('columnDefs', [ /* new first col */, ...rest ]);
+api.refreshHeader();
+api.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
+```
+
+Follow the three steps above and your first column will flip immediately after Claim.
