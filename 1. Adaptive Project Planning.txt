@@ -1,97 +1,64 @@
-This “fixes itself after I open DevTools” is a classic **grid measured before its container has its final width**. Opening DevTools fires a window `resize`, which makes AG Grid recalc widths—so it suddenly looks fine.
+That TS error happens because your ref is typed as `null`, so `ResizeObserver.observe()` (which expects an `Element`) complains.
 
-Do three things and it’ll be stable:
+Do two things:
 
-# 1) Fix column sizing model
-
-Keep fixed widths on the small columns; use `flex + minWidth` on the content columns.
+1. **Type the ref correctly**
 
 ```ts
-const columnDefs: ColDef[] = [
-  // fixed checkbox column
-  { field: 'nameAndDetailsSearchHelper', headerName: '', width: 45, minWidth: 45, maxWidth: 45,
-    checkboxSelection: checkboxSelectionFn, headerCheckboxSelection: true, headerCheckboxSelectionFilteredOnly: true,
-    showDisabledCheckboxes: true, suppressSizeToFit: true, suppressAutoSize: true },
-
-  // content columns share remaining space
-  { field: 'documentName', headerName: 'Document Name', flex: 3, minWidth: 260, wrapText: true, autoHeight: true, cellRenderer: agGridNameRenderer },
-  { field: 'journey', headerName: 'Category', flex: 2, minWidth: 160, cellRenderer: agGridCategoryCellRenderer },
-  { field: 'documentDescription', headerName: 'Document Details', flex: 4, minWidth: 320, wrapText: true, autoHeight: true, cellRenderer: agGridDetailsRenderer },
-
-  // fixed action column
-  { field: 'documentId', headerName: 'Action', width: 120, minWidth: 110, maxWidth: 140,
-    cellRenderer: agGridDownloadTemplateCellRenderer, suppressSizeToFit: true, suppressAutoSize: true },
-];
+const gridWrapRef = useRef<HTMLDivElement | null>(null);
 ```
 
-# 2) Size to fit once the container is actually laid out (and whenever it resizes)
+2. **Guard against `null` before calling `observe` (and add a fallback)**
 
-Use a `ResizeObserver` on the grid’s wrapper and call `sizeColumnsToFit()`. Also call it once on first render using `requestAnimationFrame`.
-
-```tsx
-import { AgGridReact } from 'ag-grid-react';
-import type { GridApi, GridReadyEvent } from 'ag-grid-community';
-
-const gridWrapRef = useRef<HTMLDivElement>(null);
-const [api, setApi] = useState<GridApi | null>(null);
-
-const onGridReady = (e: GridReadyEvent) => {
-  setApi(e.api);
-  // after first paint so container width is final
-  requestAnimationFrame(() => e.api.sizeColumnsToFit?.());
-};
-
+```ts
 useEffect(() => {
-  if (!api || !gridWrapRef.current) return;
-  const ro = new ResizeObserver(() => api.sizeColumnsToFit?.());
-  ro.observe(gridWrapRef.current);
+  if (!api) return;                                     // need grid api first
+
+  const el = gridWrapRef.current;                       // may be null on first render
+  const handle = () => api.sizeColumnsToFit?.();
+
+  // Fallback for environments without ResizeObserver (or if el is still null)
+  if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined' || !el) {
+    window.addEventListener('resize', handle);
+    // run once after mount/layout
+    requestAnimationFrame(handle);
+    return () => window.removeEventListener('resize', handle);
+  }
+
+  const ro = new ResizeObserver(() => handle());
+  ro.observe(el);                                       // ✅ el is HTMLDivElement here
+
+  // run once after mount/layout
+  requestAnimationFrame(handle);
+
   return () => ro.disconnect();
 }, [api]);
-
-return (
-  <div
-    ref={gridWrapRef}
-    className="ag-theme-quartz"
-    style={{ width: '100%', height: 420, minWidth: 0 }}   // minWidth:0 is important inside flex
-  >
-    <AgGridReact
-      onGridReady={onGridReady}
-      columnDefs={columnDefs}
-      defaultColDef={{ resizable: true }}
-      rowSelection="multiple"
-      // if you already call sizeColumnsToFit via ResizeObserver, you can skip these:
-      onGridSizeChanged={(e) => e.api.sizeColumnsToFit?.()}
-      onFirstDataRendered={(e) => e.api.sizeColumnsToFit?.()}
-      {...otherProps}
-    />
-  </div>
-);
 ```
 
-# 3) CSS guardrails (especially if the grid lives inside a flex layout)
+JSX wrapper (make sure the wrapper exists and can shrink inside flex):
 
-```css
-/* let the grid expand inside flex parents */
-.grid-container, .ag-theme-quartz, .ag-root-wrapper { min-width: 0; }
-
-/* optional: prevent header wrapping weirdness */
-.ag-header-cell-label { white-space: nowrap; }
+```tsx
+<div
+  ref={gridWrapRef}
+  className="ag-theme-quartz"
+  style={{ width: '100%', height: 420, minWidth: 0 }}   // minWidth: 0 important in flex layouts
+>
+  <AgGridReact
+    onGridReady={(e) => setApi(e.api)}
+    columnDefs={columnDefs}
+    defaultColDef={{ resizable: true }}
+    // optional: also size-to-fit on these events
+    onFirstDataRendered={(e) => e.api.sizeColumnsToFit?.()}
+    onGridSizeChanged={(e) => e.api.sizeColumnsToFit?.()}
+    {...otherProps}
+  />
+</div>
 ```
 
-# When you update state (e.g., Claim)
-
-After your existing context update + `refreshHeader()`/`refreshCells()`, also call:
+If you still prefer a one-liner without the fallback, you can use a non-null assertion, but only when you’re sure the element exists:
 
 ```ts
-requestAnimationFrame(() => api?.sizeColumnsToFit?.());
+ro.observe(gridWrapRef.current!); // not recommended unless you’re 100% sure
 ```
 
----
-
-**Why this works:**
-
-* Fixed widths stop the small columns from wobbling.
-* `flex + minWidth` lets the content columns share remaining space without collapsing.
-* `ResizeObserver`/`requestAnimationFrame` ensure sizing happens after the container has its real width (instead of only after a manual resize/DevTools open).
-
-If you still see any jump, remove any `autoSizeColumns` calls you added earlier—`autoSize` and `flex/sizeColumnsToFit` can fight each other.
+The typed ref + null-check pattern above is the safe, idiomatic fix.
