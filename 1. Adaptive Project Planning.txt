@@ -1,21 +1,21 @@
-if (typeof window !== 'undefined') {
-  const host = window.location.hostname.toLowerCase();
+const buildDir = path.join(appDirectory, 'build');
 
-  const DEST: Record<string, string> = {
-    'uat.commercialbanking.citidirect.com':
-      'https://uat.commercialbanking.citidirect.com/ccb/eppublic/home/',
-    'uat.citigroup.com':
-      'https://uat.citigroup.com/global/businesses/banking/commercial-bank',
-    // add prod if needed:
-    'commercialbanking.citidirect.com':
-      'https://commercialbanking.citidirect.com/ccb/eppublic/home/',
-    'www.citigroup.com':
-      'https://www.citigroup.com/global/businesses/banking/commercial-bank',
-  };
+app.use(['/global/CCBContactus/eppublic/contactus', '/ccb/eppublic/home'],
+  express.static(buildDir));
 
-  const url = DEST[host] ?? DEST['www.citigroup.com']; // fallback
-  const tgt = (window.top && window.top !== window.self) ? window.top : window;
+app.get([
+  '/global/CCBContactus/eppublic/contactus/*',
+  '/ccb/eppublic/home/*'
+], (_, res) => res.sendFile(path.join(buildDir, 'index.html')));
 
-  try { (tgt as Window).location.href = url; }
-  catch { window.location.href = url; }
-}
+// (optional) if you want special cache headers for assets:
+app.use(
+  ['/global/CCBContactus/eppublic/contactus/static', '/ccb/eppublic/home/static'],
+  express.static(path.join(buildDir, 'static'), {
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    },
+  })
+);
