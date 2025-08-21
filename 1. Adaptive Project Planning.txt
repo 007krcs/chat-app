@@ -1,63 +1,66 @@
-That error means `autoSizeColumns` got the **wrong argument shape**.
-Your AG Grid version expects an **array of column IDs**, but it received an object (e.g., `{ columns: [...] }`), so inside AG Grid it tried to do `colKeys.forEach(...)` on a non-array.
-
-Use this safe helper that works across versions:
-
-```ts
-import type { GridApi } from 'ag-grid-community';
-
-const autoSizeAll = (api: GridApi | null) => {
-  if (!api) return;
-
-  // get array of column IDs
-  const colIds = (api.getColumns() || []).map(c => c.getColId());
-  if (!colIds.length) return;
-
-  const anyApi = api as any;
-
-  // Try legacy/array signature first
-  try {
-    anyApi.autoSizeColumns(colIds);                   // v29–v30 (or columnApi equivalent)
-  } catch {
-    try {
-      anyApi.autoSizeColumns({ columns: colIds });    // v31+ object signature
-    } catch {
-      // Fallback if autosize not available
-      anyApi.sizeColumnsToFit?.();
-    }
-  }
+// FIRST: keep selection + action fixed
+const SELECT_COL: ColDef = {
+  field: 'nameAndDetailsSearchHelper',
+  headerName: '',
+  width: 45, minWidth: 45, maxWidth: 45,
+  checkboxSelection: checkboxSelectionFn,           // your existing fn
+  headerCheckboxSelection: true,
+  headerCheckboxSelectionFilteredOnly: true,
+  showDisabledCheckboxes: true,
+  suppressSizeToFit: true,                          // don't let sizeColumnsToFit change it
+  suppressAutoSize: true,                           // don't let autosize change it
 };
-```
 
-Then call it where you were doing `requestAnimationFrame(...)`:
+const ACTION_COL: ColDef = {
+  field: 'documentId',
+  headerName: 'Action',
+  width: 120, minWidth: 110, maxWidth: 140,
+  cellRenderer: agGridDownloadTemplateCellRenderer,
+  suppressSizeToFit: true,
+  suppressAutoSize: true,
+};
 
-```ts
-useEffect(() => {
-  if (!api) return;
+// THEN: give content columns FLEX + MIN WIDTHS
+const columnDefs: ColDef[] = [
+  SELECT_COL,
+  {
+    field: 'documentName',
+    headerName: 'Document Name',
+    flex: 3,                       // takes 3 parts of remaining width
+    minWidth: 260,
+    wrapText: true,
+    autoHeight: true,
+    // make sure your name renderer does NOT add another checkbox
+    cellRenderer: agGridNameRenderer,
+    tooltipField: 'documentName',  // optional: show full text on hover
+  },
+  {
+    field: 'journey',
+    headerName: 'Category',
+    flex: 2,
+    minWidth: 160,
+    cellRenderer: agGridCategoryCellRenderer,
+  },
+  {
+    field: 'documentDescription',
+    headerName: 'Document Details',
+    flex: 4,
+    minWidth: 320,
+    wrapText: true,
+    autoHeight: true,
+    cellRenderer: agGridDetailsRenderer,
+    tooltipField: 'documentDescription',
+  },
+  ACTION_COL,
+];
 
-  const ctx = api.getGridOption('context') || {};
-  api.setGridOption('context', { ...ctx, isCaseDisabled, isNewRequest });
-  api.refreshHeader();
-  api.refreshCells({ force: true, columns: ['nameAndDetailsSearchHelper'] });
-
-  // run autosize on the next frame
-  requestAnimationFrame(() => autoSizeAll(api));
-}, [api, isCaseDisabled, isNewRequest]);
-```
-
-A few sizing tips to avoid shrinking:
-
-* Don’t set `flex: 1` globally. Use fixed `minWidth`/`maxWidth` on tight columns (e.g., checkbox: `width/minWidth/maxWidth: 45`).
-* Run autosize after data is rendered as well:
-
-  ```ts
-  <AgGridReact onFirstDataRendered={() => autoSizeAll(api)} onGridSizeChanged={() => autoSizeAll(api)} />
-  ```
-* If you’re on older AG Grid, you might need `columnApi`:
-
-  ```ts
-  const colApi = (api as any).columnApi;
-  colApi?.autoSizeColumns(colIds);
-  ```
-
-This will clear the `colKeys.forEach is not a function` error and keep your columns sized correctly without manual resizing.
+// grid props
+<AgGridReact
+  columnDefs={columnDefs}
+  defaultColDef={{ resizable: true }}
+  // Let FLEX handle most sizing; only fit once / on container resize
+  onFirstDataRendered={(e) => e.api.sizeColumnsToFit?.()}
+  onGridSizeChanged={(e) => e.api.sizeColumnsToFit?.()}
+  // (keep your other props)
+  // context, rowData, selection, etc.
+ />
