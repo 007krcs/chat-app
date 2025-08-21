@@ -1,64 +1,21 @@
-That TS error happens because your ref is typed as `null`, so `ResizeObserver.observe()` (which expects an `Element`) complains.
+if (typeof window !== 'undefined') {
+  const host = window.location.hostname.toLowerCase();
 
-Do two things:
+  const DEST: Record<string, string> = {
+    'uat.commercialbanking.citidirect.com':
+      'https://uat.commercialbanking.citidirect.com/ccb/eppublic/home/',
+    'uat.citigroup.com':
+      'https://uat.citigroup.com/global/businesses/banking/commercial-bank',
+    // add prod if needed:
+    'commercialbanking.citidirect.com':
+      'https://commercialbanking.citidirect.com/ccb/eppublic/home/',
+    'www.citigroup.com':
+      'https://www.citigroup.com/global/businesses/banking/commercial-bank',
+  };
 
-1. **Type the ref correctly**
+  const url = DEST[host] ?? DEST['www.citigroup.com']; // fallback
+  const tgt = (window.top && window.top !== window.self) ? window.top : window;
 
-```ts
-const gridWrapRef = useRef<HTMLDivElement | null>(null);
-```
-
-2. **Guard against `null` before calling `observe` (and add a fallback)**
-
-```ts
-useEffect(() => {
-  if (!api) return;                                     // need grid api first
-
-  const el = gridWrapRef.current;                       // may be null on first render
-  const handle = () => api.sizeColumnsToFit?.();
-
-  // Fallback for environments without ResizeObserver (or if el is still null)
-  if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined' || !el) {
-    window.addEventListener('resize', handle);
-    // run once after mount/layout
-    requestAnimationFrame(handle);
-    return () => window.removeEventListener('resize', handle);
-  }
-
-  const ro = new ResizeObserver(() => handle());
-  ro.observe(el);                                       // ✅ el is HTMLDivElement here
-
-  // run once after mount/layout
-  requestAnimationFrame(handle);
-
-  return () => ro.disconnect();
-}, [api]);
-```
-
-JSX wrapper (make sure the wrapper exists and can shrink inside flex):
-
-```tsx
-<div
-  ref={gridWrapRef}
-  className="ag-theme-quartz"
-  style={{ width: '100%', height: 420, minWidth: 0 }}   // minWidth: 0 important in flex layouts
->
-  <AgGridReact
-    onGridReady={(e) => setApi(e.api)}
-    columnDefs={columnDefs}
-    defaultColDef={{ resizable: true }}
-    // optional: also size-to-fit on these events
-    onFirstDataRendered={(e) => e.api.sizeColumnsToFit?.()}
-    onGridSizeChanged={(e) => e.api.sizeColumnsToFit?.()}
-    {...otherProps}
-  />
-</div>
-```
-
-If you still prefer a one-liner without the fallback, you can use a non-null assertion, but only when you’re sure the element exists:
-
-```ts
-ro.observe(gridWrapRef.current!); // not recommended unless you’re 100% sure
-```
-
-The typed ref + null-check pattern above is the safe, idiomatic fix.
+  try { (tgt as Window).location.href = url; }
+  catch { window.location.href = url; }
+}
