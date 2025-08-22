@@ -1,20 +1,26 @@
-// ========= STATIC + SPA FALLBACK (order matters!) =========
+Almost—**not quite**. Those two broad mounts at the top will still shadow your specific routes:
+
+```js
+app.use(express.static(buildDir));                    // ← serves at "/"
+app.use('/global/CCBContactus/', express.static(buildDir));  // ← very broad
+```
+
+Remove them (or move them to the very bottom with `index:false`). Here’s the **safe final block** you should keep:
+
+```js
 const buildDir  = path.join(appDirectory, 'build');
 const staticDir = path.join(buildDir, 'static');
 
-// 0) (optional) quick debug
-// app.use((req, _res, next) => { console.log('REQ', req.method, req.path); next(); });
-
-// 1) Serve emitted assets under ALL prefixes that your bundle might use.
-//    fallthrough:false ensures these never drop into the SPA fallback.
+// 1) Emitted assets for BOTH bases (must come FIRST)
 app.use(
   [
-    '/global/CCBContactus/static',                    // older bundle path
-    '/global/CCBContactus/eppublic/contactus/static', // newer bundle path
-    '/ccb/eppublic/home/static',                      // new host path
+    '/global/CCBContactus/eppublic/contactus/static',
+    '/ccb/eppublic/home/static',
+    // add this if some bundles still point to the older prefix:
+    // '/global/CCBContactus/static',
   ],
   express.static(staticDir, {
-    fallthrough: false,
+    fallthrough: false, // don't fall into SPA fallback
     setHeaders: (res) => {
       res.setHeader('Cache-Control', 'no-store, no-cache');
       res.setHeader('Pragma', 'no-cache');
@@ -23,15 +29,35 @@ app.use(
   })
 );
 
-// 2) Serve the app shell (top-level files & index.html) for both bases.
+// 2) App shell (no auto index here)
 app.use('/global/CCBContactus/eppublic/contactus', express.static(buildDir, { index: false }));
 app.use('/ccb/eppublic/home',                      express.static(buildDir, { index: false }));
 
-// 3) SPA fallback AFTER the static mounts.
-//    Use RegExp routes to avoid path-to-regexp errors across Express versions.
+// 3) SPA fallback AFTER the static mounts (use RegExp for Express 4/5)
 const serveIndex = (req, res, next) =>
-  res.sendFile(path.join(buildDir, 'index.html'), (err) => err && next(err));
+  res.sendFile(path.join(buildDir, 'index.html'), err => err && next(err));
 
 app.get(/^\/global\/CCBContactus\/eppublic\/contactus(?:\/.*)?$/, serveIndex);
 app.get(/^\/ccb\/eppublic\/home(?:\/.*)?$/,                      serveIndex);
-// ========= END STATIC + SPA FALLBACK =========
+
+// health etc. can follow
+app.get('/health', (_req, res) => res.send(ECV_STATUS));
+```
+
+If you **must** keep the broad mounts, push them to the bottom and disable index serving:
+
+```js
+// only if absolutely necessary, and AFTER everything above
+app.use('/global/CCBContactus/', express.static(buildDir, { index: false }));
+app.use('/',                      express.static(buildDir, { index: false }));
+```
+
+### How to verify
+
+* In DevTools → Network, click an SVG request (e.g. `/global/CCBContactus/eppublic/contactus/static/media/*.svg`):
+
+  * **Status:** 200
+  * **Content-Type:** `image/svg+xml`
+  * Response is SVG (not `<!doctype html>`)
+
+This ordering prevents the SPA fallback from hijacking your asset requests and makes icons load correctly on **both** base URLs.
