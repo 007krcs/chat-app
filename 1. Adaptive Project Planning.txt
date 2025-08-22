@@ -1,40 +1,20 @@
-Here’s a **complete** drop-in `server.js` (or `app.js`) that serves your CRA build correctly for **both bases**:
-
-* `/global/CCBContactus/eppublic/contactus/**`
-* `/ccb/eppublic/home/**`
-
-It mounts **/static** first, serves the **app shell** (without auto-index), adds **SPA fallbacks** with safe RegExp routes, and redirects the bare bases. There are **no broad static mounts** that would shadow the specific ones.
-
-```js
-// server.js
-/* eslint-disable no-console */
+// ======== STATIC + SPA FALLBACK (order matters) ========
 const path = require('path');
-const express = require('express');
-
-const app = express();
-const PORT = process.env.PORT || 42012;
-
-// If your build folder lives next to this file, __dirname is fine.
-// Adjust if needed.
-const appDirectory = __dirname;
 const buildDir  = path.join(appDirectory, 'build');
 const staticDir = path.join(buildDir, 'static');
 
-// ---- any other middleware you already use ----
-// app.use(express.json());
-// app.use(cors());
+// (debug) log the path so we can see what is requested
+app.use((req, _res, next) => { console.log('[REQ]', req.method, req.path); next(); });
 
-// ======================================================
-//  STATIC + SPA FALLBACK  (ORDER MATTERS!)
-// ======================================================
-
-// 1) Serve emitted assets (SVG/CSS/JS) for BOTH bases.
-//    fallthrough:false prevents these from dropping into the SPA fallback.
+/**
+ * 1) Serve emitted assets for BOTH bases.
+ *    fallthrough:false prevents these from ever hitting the SPA fallback.
+ */
 app.use(
   [
     '/global/CCBContactus/eppublic/contactus/static',
     '/ccb/eppublic/home/static',
-    // keep this extra alias if some older bundles still point here
+    // keep this extra alias if some bundles still point here
     '/global/CCBContactus/static',
   ],
   express.static(staticDir, {
@@ -47,12 +27,16 @@ app.use(
   })
 );
 
-// 2) Serve the app shell (top-level build files) at both bases.
-//    Do NOT auto-serve index.html here; we’ll send it in the fallback.
+/**
+ * 2) Serve the app shell (top-level build files) at both bases.
+ *    Do NOT auto-serve index here; send it only in the fallback below.
+ */
 app.use('/global/CCBContactus/eppublic/contactus', express.static(buildDir, { index: false }));
 app.use('/ccb/eppublic/home',                      express.static(buildDir, { index: false }));
 
-// 2a) Redirect bare bases to the real app bases (so /global/CCBContactus/ works)
+/**
+ * 2a) Redirect bare bases to the real app bases (nice DX)
+ */
 app.get(/^\/global\/CCBContactus\/?$/, (_req, res) =>
   res.redirect(301, '/global/CCBContactus/eppublic/contactus/')
 );
@@ -60,46 +44,22 @@ app.get(/^\/ccb\/eppublic\/?$/, (_req, res) =>
   res.redirect(301, '/ccb/eppublic/home/')
 );
 
-// 3) SPA fallback AFTER all static mounts.
-//    Use RegExp routes (works on Express 4/5 without path-to-regexp issues).
+/**
+ * 3) SPA fallback AFTER all static mounts.
+ *    RegExp routes avoid path-to-regexp incompatibilities.
+ */
 const serveIndex = (req, res, next) =>
   res.sendFile(path.join(buildDir, 'index.html'), (err) => err && next(err));
 
 app.get(/^\/global\/CCBContactus\/eppublic\/contactus(?:\/.*)?$/, serveIndex);
 app.get(/^\/ccb\/eppublic\/home(?:\/.*)?$/,                      serveIndex);
 
-// ------------------------------------------------------
-// Health (and any other APIs) can be after the SPA block
-// ------------------------------------------------------
-const ECV_STATUS = 'OK';
+// 4) Health, APIs, etc. can follow here
 app.get('/health', (_req, res) => res.send(ECV_STATUS));
 
-// ======================================================
-//  DO NOT add broad static mounts like the following,
-//  as they will shadow the specific routes above and
-//  break asset loading:
-//
-//  app.use(express.static(buildDir));                    // at '/'
-//  app.use('/global/CCBContactus/', express.static(buildDir));
-// ======================================================
-
-app.listen(PORT, () => {
-  console.log(`Server ready http://localhost:${PORT}`);
+// 5) (optional) error logger so you see if anything still falls through
+app.use((err, _req, res, _next) => {
+  console.error('[ERR]', err);
+  res.status(500).send('Internal error');
 });
-```
-
-### What this gives you
-
-* Icons (e.g. `/global/CCBContactus/eppublic/contactus/static/media/*.svg`) return **200** with `image/svg+xml` on both hosts.
-* Visiting `/global/CCBContactus/` or `/ccb/eppublic/` redirects to the correct app entry.
-* No `path-to-regexp` crashes (we use RegExp routes, not `*`).
-
-### Verify
-
-Open DevTools → Network on each host and click a missing SVG:
-
-* **Status**: 200
-* **Content-Type**: `image/svg+xml`
-* **Response**: SVG markup (not `<!doctype html>`)
-
-> Long-term simplification: if you can rebuild the React app with relative assets (`"homepage": "."` or `PUBLIC_URL=.`), the bundle will use `static/media/...` and these aliases become unnecessary—but the server above will work immediately.
+// ======== END STATIC + SPA FALLBACK ========
