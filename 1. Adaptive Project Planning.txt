@@ -1,29 +1,5 @@
-const buildDir  = path.join(appDirectory, "build");
-const staticDir = path.join(buildDir, "static");
+const serveIndex = (req, res, next) =>
+  res.sendFile(path.join(buildDir, 'index.html'), err => err && next(err));
 
-// serve emitted assets for both bases
-app.use(
-  [
-    "/global/CCBContactus/eppublic/contactus/static",
-    "/ccb/eppublic/home/static",
-  ],
-  express.static(staticDir, { fallthrough: false })
-);
-
-// serve the app shell
-app.use(
-  [
-    "/global/CCBContactus/eppublic/contactus",
-    "/ccb/eppublic/home",
-  ],
-  express.static(buildDir)
-);
-
-// SPA fallback
-app.get(
-  [
-    "/global/CCBContactus/eppublic/contactus/*",
-    "/ccb/eppublic/home/*",
-  ],
-  (_req, res) => res.sendFile(path.join(buildDir, "index.html"))
-);
+app.get('/global/CCBContactus/eppublic/contactus/(.*)', serveIndex);
+app.get('/ccb/eppublic/home/(.*)',                      serveIndex);
