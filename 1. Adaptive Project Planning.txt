@@ -1,21 +1,29 @@
-const buildDir = path.join(appDirectory, 'build');
+const buildDir  = path.join(appDirectory, "build");
+const staticDir = path.join(buildDir, "static");
 
-app.use(['/global/CCBContactus/eppublic/contactus', '/ccb/eppublic/home'],
-  express.static(buildDir));
-
-app.get([
-  '/global/CCBContactus/eppublic/contactus/*',
-  '/ccb/eppublic/home/*'
-], (_, res) => res.sendFile(path.join(buildDir, 'index.html')));
-
-// (optional) if you want special cache headers for assets:
+// serve emitted assets for both bases
 app.use(
-  ['/global/CCBContactus/eppublic/contactus/static', '/ccb/eppublic/home/static'],
-  express.static(path.join(buildDir, 'static'), {
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'no-store, no-cache');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-    },
-  })
+  [
+    "/global/CCBContactus/eppublic/contactus/static",
+    "/ccb/eppublic/home/static",
+  ],
+  express.static(staticDir, { fallthrough: false })
+);
+
+// serve the app shell
+app.use(
+  [
+    "/global/CCBContactus/eppublic/contactus",
+    "/ccb/eppublic/home",
+  ],
+  express.static(buildDir)
+);
+
+// SPA fallback
+app.get(
+  [
+    "/global/CCBContactus/eppublic/contactus/*",
+    "/ccb/eppublic/home/*",
+  ],
+  (_req, res) => res.sendFile(path.join(buildDir, "index.html"))
 );
