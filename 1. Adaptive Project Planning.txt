@@ -1,8 +1,37 @@
+// ========= STATIC + SPA FALLBACK (order matters!) =========
+const buildDir  = path.join(appDirectory, 'build');
+const staticDir = path.join(buildDir, 'static');
+
+// 0) (optional) quick debug
+// app.use((req, _res, next) => { console.log('REQ', req.method, req.path); next(); });
+
+// 1) Serve emitted assets under ALL prefixes that your bundle might use.
+//    fallthrough:false ensures these never drop into the SPA fallback.
+app.use(
+  [
+    '/global/CCBContactus/static',                    // older bundle path
+    '/global/CCBContactus/eppublic/contactus/static', // newer bundle path
+    '/ccb/eppublic/home/static',                      // new host path
+  ],
+  express.static(staticDir, {
+    fallthrough: false,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    },
+  })
+);
+
+// 2) Serve the app shell (top-level files & index.html) for both bases.
+app.use('/global/CCBContactus/eppublic/contactus', express.static(buildDir, { index: false }));
+app.use('/ccb/eppublic/home',                      express.static(buildDir, { index: false }));
+
+// 3) SPA fallback AFTER the static mounts.
+//    Use RegExp routes to avoid path-to-regexp errors across Express versions.
 const serveIndex = (req, res, next) =>
-  res.sendFile(path.join(buildDir, 'index.html'), err => err && next(err));
+  res.sendFile(path.join(buildDir, 'index.html'), (err) => err && next(err));
 
-// /global/CCBContactus/eppublic/contactus/** -> index.html
 app.get(/^\/global\/CCBContactus\/eppublic\/contactus(?:\/.*)?$/, serveIndex);
-
-// /ccb/eppublic/home/** -> index.html
-app.get(/^\/ccb\/eppublic\/home(?:\/.*)?$/, serveIndex);
+app.get(/^\/ccb\/eppublic\/home(?:\/.*)?$/,                      serveIndex);
+// ========= END STATIC + SPA FALLBACK =========
