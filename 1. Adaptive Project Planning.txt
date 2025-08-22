@@ -1,5 +1,8 @@
 const serveIndex = (req, res, next) =>
   res.sendFile(path.join(buildDir, 'index.html'), err => err && next(err));
 
-app.get('/global/CCBContactus/eppublic/contactus/(.*)', serveIndex);
-app.get('/ccb/eppublic/home/(.*)',                      serveIndex);
+// /global/CCBContactus/eppublic/contactus/** -> index.html
+app.get(/^\/global\/CCBContactus\/eppublic\/contactus(?:\/.*)?$/, serveIndex);
+
+// /ccb/eppublic/home/** -> index.html
+app.get(/^\/ccb\/eppublic\/home(?:\/.*)?$/, serveIndex);
