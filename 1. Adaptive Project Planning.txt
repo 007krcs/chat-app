@@ -1,3 +1,4 @@
+B — Keep three useState but set a single "ready" marker (works but clunkier)
 import React, { useState, useEffect } from 'react';
 
 function MyComponent({ onSubmitSearch }) {
@@ -29,3 +30,6 @@ function MyComponent({ onSubmitSearch }) {
 
   return <div>{/* UI */}</div>;
 }
+
+
+Why this works: caseReadyKey tells your effect to check that all three values reached the expected values. It's a workaround — not as elegant as useReducer but useful when you must keep useState calls.
