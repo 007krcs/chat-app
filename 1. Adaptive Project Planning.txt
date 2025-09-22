@@ -1,65 +1,31 @@
-// ======== STATIC + SPA FALLBACK (order matters) ========
-const path = require('path');
-const buildDir  = path.join(appDirectory, 'build');
-const staticDir = path.join(buildDir, 'static');
+import React, { useState, useEffect } from 'react';
 
-// (debug) log the path so we can see what is requested
-app.use((req, _res, next) => { console.log('[REQ]', req.method, req.path); next(); });
+function MyComponent({ onSubmitSearch }) {
+  const [searchValue, setSearchValue] = useState(null);
+  const [currentCaseId, setCurrentCaseId] = useState(null);
+  const [selectedSearchType, setSelectedSearchType] = useState(null);
+  // marker to indicate "these three were updated as part of the same response"
+  const [caseReadyKey, setCaseReadyKey] = useState(null);
 
-/**
- * 1) Serve emitted assets for BOTH bases.
- *    fallthrough:false prevents these from ever hitting the SPA fallback.
- */
-app.use(
-  [
-    '/global/CCBContactus/eppublic/contactus/static',
-    '/ccb/eppublic/home/static',
-    // keep this extra alias if some bundles still point here
-    '/global/CCBContactus/static',
-  ],
-  express.static(staticDir, {
-    fallthrough: false,
-    setHeaders: (res) => {
-      res.setHeader('Cache-Control', 'no-store, no-cache');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-    },
-  })
-);
+  useEffect(() => {
+    if (caseReadyKey && searchValue && selectedSearchType === 'caseId' && currentCaseId) {
+      console.log('All set -> trigger search', { searchValue, selectedSearchType, currentCaseId });
+      onSubmitSearch(false);
+      // optionally reset marker:
+      setCaseReadyKey(null);
+    }
+  }, [caseReadyKey, searchValue, selectedSearchType, currentCaseId, onSubmitSearch]);
 
-/**
- * 2) Serve the app shell (top-level build files) at both bases.
- *    Do NOT auto-serve index here; send it only in the fallback below.
- */
-app.use('/global/CCBContactus/eppublic/contactus', express.static(buildDir, { index: false }));
-app.use('/ccb/eppublic/home',                      express.static(buildDir, { index: false }));
+  // in your API .then(...)
+  const handleResponse = (response) => {
+    const id = response.data?.case?.caseId;
+    // set the three states (they may update in separate microtasks),
+    // then set marker that signals the effect to check them
+    setSearchValue(id);
+    setCurrentCaseId(id);
+    setSelectedSearchType('caseId');
+    setCaseReadyKey(Date.now()); // unique marker / timestamp
+  };
 
-/**
- * 2a) Redirect bare bases to the real app bases (nice DX)
- */
-app.get(/^\/global\/CCBContactus\/?$/, (_req, res) =>
-  res.redirect(301, '/global/CCBContactus/eppublic/contactus/')
-);
-app.get(/^\/ccb\/eppublic\/?$/, (_req, res) =>
-  res.redirect(301, '/ccb/eppublic/home/')
-);
-
-/**
- * 3) SPA fallback AFTER all static mounts.
- *    RegExp routes avoid path-to-regexp incompatibilities.
- */
-const serveIndex = (req, res, next) =>
-  res.sendFile(path.join(buildDir, 'index.html'), (err) => err && next(err));
-
-app.get(/^\/global\/CCBContactus\/eppublic\/contactus(?:\/.*)?$/, serveIndex);
-app.get(/^\/ccb\/eppublic\/home(?:\/.*)?$/,                      serveIndex);
-
-// 4) Health, APIs, etc. can follow here
-app.get('/health', (_req, res) => res.send(ECV_STATUS));
-
-// 5) (optional) error logger so you see if anything still falls through
-app.use((err, _req, res, _next) => {
-  console.error('[ERR]', err);
-  res.status(500).send('Internal error');
-});
-// ======== END STATIC + SPA FALLBACK ========
+  return <div>{/* UI */}</div>;
+}
