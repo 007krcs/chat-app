@@ -1,35 +1,40 @@
-B — Keep three useState but set a single "ready" marker (works but clunkier)
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 function MyComponent({ onSubmitSearch }) {
   const [searchValue, setSearchValue] = useState(null);
   const [currentCaseId, setCurrentCaseId] = useState(null);
   const [selectedSearchType, setSelectedSearchType] = useState(null);
-  // marker to indicate "these three were updated as part of the same response"
   const [caseReadyKey, setCaseReadyKey] = useState(null);
 
+  // keep a stable ref to the latest onSubmitSearch so effect doesn't need it in deps
+  const onSubmitRef = useRef(onSubmitSearch);
+  useEffect(() => { onSubmitRef.current = onSubmitSearch; }, [onSubmitSearch]);
+
+  // Run ONLY when caseReadyKey changes (marker), check the other states and then clear marker
   useEffect(() => {
-    if (caseReadyKey && searchValue && selectedSearchType === 'caseId' && currentCaseId) {
-      console.log('All set -> trigger search', { searchValue, selectedSearchType, currentCaseId });
-      onSubmitSearch(false);
-      // optionally reset marker:
-      setCaseReadyKey(null);
+    if (!caseReadyKey) return;
+
+    // check that the three states reached expected values
+    if (searchValue && selectedSearchType === 'caseId' && currentCaseId) {
+      // use the ref to call the callback (stable)
+      onSubmitRef.current(false);
     }
-  }, [caseReadyKey, searchValue, selectedSearchType, currentCaseId, onSubmitSearch]);
+
+    // clear the marker once handled to avoid repeat firing
+    setCaseReadyKey(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseReadyKey]); // deliberately only depend on the marker
 
   // in your API .then(...)
   const handleResponse = (response) => {
     const id = response.data?.case?.caseId;
-    // set the three states (they may update in separate microtasks),
-    // then set marker that signals the effect to check them
     setSearchValue(id);
     setCurrentCaseId(id);
     setSelectedSearchType('caseId');
-    setCaseReadyKey(Date.now()); // unique marker / timestamp
+
+    // then set marker once - effect will check real states and call submit
+    setCaseReadyKey(Date.now());
   };
 
-  return <div>{/* UI */}</div>;
+  return <div/>;
 }
-
-
-Why this works: caseReadyKey tells your effect to check that all three values reached the expected values. It's a workaround — not as elegant as useReducer but useful when you must keep useState calls.
