@@ -1,40 +1,500 @@
-import React, { useState, useEffect, useRef } from 'react';
+Nice — below is a **copy-paste ready, Redux-first (Option A) example** that demonstrates **authentication (createAsyncThunk)** + **RTK Query** for CRUD on **users** and **todos**, optimistic deletes, protected routes, and how token is shared across RTK Query endpoints.
 
-function MyComponent({ onSubmitSearch }) {
-  const [searchValue, setSearchValue] = useState(null);
-  const [currentCaseId, setCurrentCaseId] = useState(null);
-  const [selectedSearchType, setSelectedSearchType] = useState(null);
-  const [caseReadyKey, setCaseReadyKey] = useState(null);
+Files included (core ones you asked for). Put them into the folder structure from earlier (`src/...`) and run the app.
 
-  // keep a stable ref to the latest onSubmitSearch so effect doesn't need it in deps
-  const onSubmitRef = useRef(onSubmitSearch);
-  useEffect(() => { onSubmitRef.current = onSubmitSearch; }, [onSubmitSearch]);
+> Assumptions:
+>
+> * Vite + React app scaffolded (React + JS).
+> * `@reduxjs/toolkit`, `react-redux`, `@tanstack/react-query`, `react-router-dom`, `axios` installed.
+> * Set `VITE_API_URL` in `.env` or it defaults to `/api`.
 
-  // Run ONLY when caseReadyKey changes (marker), check the other states and then clear marker
-  useEffect(() => {
-    if (!caseReadyKey) return;
+---
 
-    // check that the three states reached expected values
-    if (searchValue && selectedSearchType === 'caseId' && currentCaseId) {
-      // use the ref to call the callback (stable)
-      onSubmitRef.current(false);
+# 1) `src/main.jsx`
+
+```jsx
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { Provider } from "react-redux";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App";
+import { store } from "./app/store";
+import "./index.css";
+
+const queryClient = new QueryClient();
+
+createRoot(document.getElementById("root")).render(
+  <Provider store={store}>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </Provider>
+);
+```
+
+---
+
+# 2) `src/app/store.js`
+
+```js
+import { configureStore } from "@reduxjs/toolkit";
+import authReducer from "../features/auth/authSlice";
+import { api } from "../api/api"; // RTK Query api (users + todos endpoints)
+
+export const store = configureStore({
+  reducer: {
+    auth: authReducer,
+    [api.reducerPath]: api.reducer,
+  },
+  middleware: (getDefault) => getDefault().concat(api.middleware),
+});
+```
+
+---
+
+# 3) `src/features/auth/authSlice.js`
+
+```js
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+
+/**
+ * loginThunk - createAsyncThunk example for authentication.
+ * Expects API to return: { token: '...', user: {...} }
+ */
+export const loginThunk = createAsyncThunk(
+  "auth/login",
+  async ({ email, password }, thunkAPI) => {
+    const API_URL = import.meta.env.VITE_API_URL || "/api";
+    const res = await fetch(`${API_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return thunkAPI.rejectWithValue(errData.message || "Login failed");
     }
+    const data = await res.json();
+    // data = { token, user }
+    // Persist token in localStorage (optional, be mindful of XSS)
+    localStorage.setItem("token", data.token);
+    return data;
+  }
+);
 
-    // clear the marker once handled to avoid repeat firing
-    setCaseReadyKey(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [caseReadyKey]); // deliberately only depend on the marker
+const initialState = {
+  token: localStorage.getItem("token") || null,
+  user: null,
+  loading: false,
+  error: null,
+};
 
-  // in your API .then(...)
-  const handleResponse = (response) => {
-    const id = response.data?.case?.caseId;
-    setSearchValue(id);
-    setCurrentCaseId(id);
-    setSelectedSearchType('caseId');
+const authSlice = createSlice({
+  name: "auth",
+  initialState,
+  reducers: {
+    logout(state) {
+      state.token = null;
+      state.user = null;
+      localStorage.removeItem("token");
+    },
+    setUser(state, action) {
+      state.user = action.payload;
+    },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(loginThunk.pending, (s) => {
+        s.loading = true; s.error = null;
+      })
+      .addCase(loginThunk.fulfilled, (s, a) => {
+        s.loading = false;
+        s.token = a.payload.token;
+        s.user = a.payload.user;
+      })
+      .addCase(loginThunk.rejected, (s, a) => {
+        s.loading = false;
+        s.error = a.payload || a.error.message;
+      });
+  },
+});
 
-    // then set marker once - effect will check real states and call submit
-    setCaseReadyKey(Date.now());
+export const { logout, setUser } = authSlice.actions;
+export default authSlice.reducer;
+```
+
+---
+
+# 4) `src/api/api.js` — RTK Query service (users + todos)
+
+```js
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+
+/**
+ * Unified RTK Query API service for Users and Todos.
+ * Uses prepareHeaders to add Authorization from Redux auth slice.
+ * Tagging used to invalidate caches after mutations.
+ */
+
+const baseUrl = import.meta.env.VITE_API_URL || "/api";
+
+export const api = createApi({
+  reducerPath: "api",
+  baseQuery: fetchBaseQuery({
+    baseUrl,
+    prepareHeaders: (headers, { getState }) => {
+      const token = getState().auth.token;
+      if (token) headers.set("authorization", `Bearer ${token}`);
+      return headers;
+    },
+  }),
+  tagTypes: ["Users", "Todos"],
+  endpoints: (builder) => ({
+    // USERS
+    getUsers: builder.query({
+      query: () => "/users",
+      providesTags: (result) =>
+        result ? [...result.map((u) => ({ type: "Users", id: u.id })), { type: "Users", id: "LIST" }] : [{ type: "Users", id: "LIST" }],
+    }),
+    getUser: builder.query({ query: (id) => `/users/${id}`, providesTags: (result, error, id) => [{ type: "Users", id }] }),
+    createUser: builder.mutation({
+      query: (newUser) => ({ url: "/users", method: "POST", body: newUser }),
+      invalidatesTags: [{ type: "Users", id: "LIST" }],
+    }),
+    updateUser: builder.mutation({
+      query: ({ id, ...patch }) => ({ url: `/users/${id}`, method: "PATCH", body: patch }),
+      invalidatesTags: (result, error, { id }) => [{ type: "Users", id }, { type: "Users", id: "LIST" }],
+    }),
+    deleteUser: builder.mutation({
+      query: (id) => ({ url: `/users/${id}`, method: "DELETE" }),
+      // optimistic update example via onQueryStarted below
+      invalidatesTags: (result, error, id) => [{ type: "Users", id }, { type: "Users", id: "LIST" }],
+      async onQueryStarted(id, { dispatch, queryFulfilled }) {
+        // optionally implement optimistic UI with updateQueryData if needed
+        // const patchResult = dispatch(api.util.updateQueryData('getUsers', undefined, draft => draft.filter(u => u.id !== id)));
+        try {
+          await queryFulfilled;
+        } catch {
+          // patchResult.undo();
+        }
+      },
+    }),
+
+    // TODOS
+    getTodos: builder.query({
+      query: () => "/todos",
+      providesTags: (result) =>
+        result ? [...result.map((t) => ({ type: "Todos", id: t.id })), { type: "Todos", id: "LIST" }] : [{ type: "Todos", id: "LIST" }],
+    }),
+    createTodo: builder.mutation({
+      query: (todo) => ({ url: "/todos", method: "POST", body: todo }),
+      invalidatesTags: [{ type: "Todos", id: "LIST" }],
+    }),
+    updateTodo: builder.mutation({
+      query: ({ id, ...patch }) => ({ url: `/todos/${id}`, method: "PATCH", body: patch }),
+      invalidatesTags: (result, error, { id }) => [{ type: "Todos", id }, { type: "Todos", id: "LIST" }],
+    }),
+    deleteTodo: builder.mutation({
+      query: (id) => ({ url: `/todos/${id}`, method: "DELETE" }),
+      invalidatesTags: (result, error, id) => [{ type: "Todos", id }, { type: "Todos", id: "LIST" }],
+      async onQueryStarted(id, { dispatch, queryFulfilled }) {
+        // optimistic example omitted for brevity
+      },
+    }),
+  }),
+});
+
+export const {
+  useGetUsersQuery,
+  useGetUserQuery,
+  useCreateUserMutation,
+  useUpdateUserMutation,
+  useDeleteUserMutation,
+  useGetTodosQuery,
+  useCreateTodoMutation,
+  useUpdateTodoMutation,
+  useDeleteTodoMutation,
+} = api;
+```
+
+---
+
+# 5) `src/components/Login.jsx`
+
+```jsx
+import React, { useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { loginThunk } from "../features/auth/authSlice";
+import { useNavigate, useLocation } from "react-router-dom";
+
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { loading, error, token } = useSelector((s) => s.auth);
+  const from = location.state?.from?.pathname || "/";
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await dispatch(loginThunk({ email, password })).unwrap();
+      // loginThunk stores token in Redux and localStorage
+      navigate(from, { replace: true });
+    } catch (err) {
+      console.error("Login failed", err);
+    }
   };
 
-  return <div/>;
+  return (
+    <div style={{ padding: 20 }}>
+      <h2>Login</h2>
+      <form onSubmit={onSubmit}>
+        <div>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" />
+        </div>
+        <div>
+          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="password" />
+        </div>
+        <button type="submit" disabled={loading}>Login</button>
+        {error && <div style={{ color: "red" }}>{error}</div>}
+      </form>
+    </div>
+  );
 }
+```
+
+---
+
+# 6) `src/routes/ProtectedRoute.jsx`
+
+```jsx
+import React from "react";
+import { useSelector } from "react-redux";
+import { Navigate, useLocation } from "react-router-dom";
+
+export default function ProtectedRoute({ children }) {
+  const token = useSelector((s) => s.auth.token);
+  const location = useLocation();
+  if (!token) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return children;
+}
+```
+
+---
+
+# 7) `src/components/UsersRTK.jsx` — CRUD example for Users (list, create, update, delete)
+
+```jsx
+import React, { useState } from "react";
+import {
+  useGetUsersQuery,
+  useCreateUserMutation,
+  useUpdateUserMutation,
+  useDeleteUserMutation,
+} from "../api/api";
+
+export default function UsersRTK() {
+  const { data: users = [], isLoading, isFetching, error } = useGetUsersQuery();
+  const [createUser] = useCreateUserMutation();
+  const [updateUser] = useUpdateUserMutation();
+  const [deleteUser] = useDeleteUserMutation();
+
+  const [name, setName] = useState("");
+
+  const onCreate = async () => {
+    if (!name.trim()) return;
+    await createUser({ name }).unwrap();
+    setName("");
+  };
+
+  const onToggleNameCase = async (u) => {
+    await updateUser({ id: u.id, name: u.name === u.name.toUpperCase() ? u.name.toLowerCase() : u.name.toUpperCase() }).unwrap();
+  };
+
+  const onDelete = async (id) => {
+    if (!confirm("Delete user?")) return;
+    await deleteUser(id).unwrap();
+  };
+
+  if (isLoading) return <div>Loading users...</div>;
+  if (error) return <div>Error loading users</div>;
+
+  return (
+    <div style={{ padding: 16 }}>
+      <h3>Users {isFetching && "(updating...)"}</h3>
+      <div>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New user name" />
+        <button onClick={onCreate}>Create</button>
+      </div>
+      <ul>
+        {users.map((u) => (
+          <li key={u.id}>
+            {u.name}{" "}
+            <button onClick={() => onToggleNameCase(u)}>ToggleCase</button>{" "}
+            <button onClick={() => onDelete(u.id)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+---
+
+# 8) `src/components/TodosRTK.jsx` — Todos CRUD example
+
+```jsx
+import React, { useState } from "react";
+import { useGetTodosQuery, useCreateTodoMutation, useUpdateTodoMutation, useDeleteTodoMutation } from "../api/api";
+
+export default function TodosRTK() {
+  const { data: todos = [], isLoading } = useGetTodosQuery();
+  const [createTodo] = useCreateTodoMutation();
+  const [updateTodo] = useUpdateTodoMutation();
+  const [deleteTodo] = useDeleteTodoMutation();
+  const [title, setTitle] = useState("");
+
+  if (isLoading) return <div>Loading todos...</div>;
+
+  return (
+    <div style={{ padding: 16 }}>
+      <h3>Todos</h3>
+      <div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New todo" />
+        <button onClick={async () => { if (!title) return; await createTodo({ title, completed: false }); setTitle(""); }}>Add</button>
+      </div>
+      <ul>
+        {todos.map(t => (
+          <li key={t.id}>
+            <input type="checkbox" checked={t.completed} onChange={() => updateTodo({ id: t.id, completed: !t.completed })} />
+            {t.title}
+            <button onClick={() => deleteTodo(t.id)}>Delete</button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+---
+
+# 9) `src/App.jsx` — Routes
+
+```jsx
+import React from "react";
+import { Routes, Route, Link } from "react-router-dom";
+import Login from "./components/Login";
+import UsersRTK from "./components/UsersRTK";
+import TodosRTK from "./components/TodosRTK";
+import ProtectedRoute from "./routes/ProtectedRoute";
+import { useDispatch } from "react-redux";
+import { logout } from "./features/auth/authSlice";
+
+export default function App() {
+  const dispatch = useDispatch();
+  return (
+    <div>
+      <nav style={{ padding: 8, borderBottom: "1px solid #ccc" }}>
+        <Link to="/">Home</Link>{" | "}
+        <Link to="/users">Users</Link>{" | "}
+        <Link to="/todos">Todos</Link>{" | "}
+        <button onClick={() => dispatch(logout())}>Logout</button>
+      </nav>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute>
+              <UsersRTK />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/todos"
+          element={
+            <ProtectedRoute>
+              <TodosRTK />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/" element={<ProtectedRoute><div style={{ padding: 20 }}><h2>Welcome — choose a page</h2></div></ProtectedRoute>} />
+      </Routes>
+    </div>
+  );
+}
+```
+
+---
+
+# 10) `.env` (example)
+
+```
+VITE_API_URL=https://api.example.com
+```
+
+> For local testing you can point to a local backend or a mocked endpoint.
+
+---
+
+# How the pieces relate (flow recap)
+
+1. **Login**
+
+   * `Login.jsx` dispatches `loginThunk` → `authSlice` stores `token`.
+   * `localStorage` also stores token (optional persistence).
+2. **RTK Query requests**
+
+   * `api` uses `fetchBaseQuery.prepareHeaders` that reads `getState().auth.token` and sets `Authorization` header for every request.
+3. **CRUD operations**
+
+   * `useGetUsersQuery()` fetches users and caches them in the Redux store under `api` reducer.
+   * `useCreateUserMutation()` / `useUpdateUserMutation()` / `useDeleteUserMutation()` perform POST/PATCH/DELETE and invalidate tags to keep cache fresh.
+4. **Optimistic / instant UI**
+
+   * RTK Query supports `updateQueryData` in `onQueryStarted` for optimistic updates — example scaffolded in `api.js`.
+5. **Protected routes**
+
+   * `ProtectedRoute` checks `auth.token` in Redux; if not present, redirects to `/login`.
+
+---
+
+# Notes on API & testing locally
+
+* If you don't yet have a backend, you can:
+
+  * Point `VITE_API_URL` to a mock server (msw), or
+  * Use a tiny Express server, or
+  * Adapt to `json-server` for simple CRUD (no auth) and stub login.
+* For testing authentication flows with real `401`/refresh token logic, you'd typically:
+
+  * Implement refresh token endpoints on the server.
+  * Intercept `401` in `fetchBaseQuery` or use middleware to trigger a `refreshThunk` and retry failed queries. (For more complex orchestration, Saga is often introduced.)
+
+---
+
+# Quick `npm` commands
+
+```bash
+npm install
+npm run dev
+```
+
+---
+
+If you want, next I’ll:
+
+* Generate a **minimal Node/Express mock backend** (with `/auth/login`, `/users`, `/todos`) so you can run the whole thing locally; or
+* Convert these files to **TypeScript**; or
+* Add **optimistic delete examples** fully implemented with `api.util.updateQueryData` (I left a scaffold in `deleteUser` showing where to apply it).
+
+Which next step?
